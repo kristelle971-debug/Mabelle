@@ -778,7 +778,7 @@ async function analyzeEmo(){
   }catch(e){
     const msg=e&&e.message?e.message:String(e);
     console.error('IA:',msg);
-    document.getElementById('emo-ai-text').textContent=msg.includes('no-endpoint')?"Configure l'URL IA dans ton Profil ✦":msg.includes('http-')?'Erreur connexion IA':'Ce que tu ressens est valide. Prends le temps de respirer.';
+    document.getElementById('emo-ai-text').textContent=msg.includes('no-endpoint')?"Configure l'URL IA dans ton Profil ✦":'⚠️ '+msg;
     document.getElementById('emo-ai-box').style.display='block';
   }
   // Révéler phase 2 après l'analyse + transformer le bouton
