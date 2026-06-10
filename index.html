@@ -185,9 +185,10 @@ input[type=range].int-slider{position:absolute;inset:0;width:100%;height:100%;op
 .toggle.on{background:var(--violet);border-color:var(--violet);}
 .toggle-thumb{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform 0.28s;}
 .toggle.on .toggle-thumb{transform:translateX(20px);}
-.hist-item{background:rgba(255,255,255,0.03);border-radius:var(--radius-sm);padding:12px;margin-bottom:7px;border:1px solid var(--border);}
-.hist-date{font-size:10px;color:var(--text-muted);margin-bottom:5px;}
-.hist-text{font-size:13px;color:var(--text-secondary);line-height:1.45;}
+.hist-item{background:rgba(255,255,255,0.03);border-radius:var(--radius-sm);padding:12px;margin-bottom:7px;border:1px solid var(--border);position:relative;overflow:hidden;transition:transform 0.2s ease;}
+.hist-item.swiped{transform:translateX(-70px);}
+.hist-del-btn{position:absolute;right:0;top:0;bottom:0;width:64px;background:var(--rose);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;border-radius:0 var(--radius-sm) var(--radius-sm) 0;}
+.hist-del-btn:active{background:#c0392b;}
 .ai-loading{display:inline-flex;gap:4px;align-items:center;}
 .ai-dot{width:5px;height:5px;border-radius:50%;background:var(--violet-bright);animation:aidot 1.2s infinite;}
 .ai-dot:nth-child(2){animation-delay:.2s;}.ai-dot:nth-child(3){animation-delay:.4s;}
@@ -476,7 +477,21 @@ function todayISO(){return new Date().toISOString().split('T')[0];}
 function pad(n){return String(n).padStart(2,'0');}
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
 function moodColor(v){return 'hsl('+Math.round(v*1.2)+',62%,53%)';}
-async function callClaude(body){const url=(ls().aiUrl||'').trim();if(!url)throw new Error('no-endpoint');const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});return await r.json();}
+async function callClaude(body){
+  const url=(ls().aiUrl||'').trim();
+  if(!url)throw new Error('no-endpoint');
+  const r=await fetch(url,{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'Authorization':'Bearer '+SB_KEY,
+      'apikey':SB_KEY
+    },
+    body:JSON.stringify(body)
+  });
+  if(!r.ok)throw new Error('http-'+r.status);
+  return await r.json();
+}
 
 // ── STATE ─────────────────────────────────────────────────
 const S={pin:'1234',pinIn:'',curScreen:'lock-screen',prevScreen:'home-screen',
@@ -606,9 +621,48 @@ const anchor=ANCHORS[Math.floor(Math.random()*ANCHORS.length)];document.getEleme
 const{data:inserted}=await SB.from('emotions').insert({ressenti:feeling,intensite:+intensity,ancrage:anchor,reponse_ia:''}).select().single();
 await addTL('emotion',feeling+' (intensité : '+intensity+')');renderEmoHistory();
 // Tentative IA
-try{const data=await callClaude({model:'claude-haiku-4-5-20251001',max_tokens:280,messages:[{role:'user',content:`Tu es une thérapeute bienveillante. Une femme hypersensible de 43 ans exprime : "${feeling}"${context?' Contexte : "'+context+'"':''} Intensité : ${intensity}/100. Réponds en 3-4 phrases douces, sans conseils directifs. Valide, comprends, accompagne. En français, tutoie-la.`}]});const txt=data.content?.[0]?.text||'';if(txt){document.getElementById('emo-ai-text').textContent=txt;document.getElementById('emo-ai-box').style.display='block';if(inserted)await SB.from('emotions').update({reponse_ia:txt}).eq('id',inserted.id);}}catch(e){document.getElementById('emo-ai-text').textContent='Ce que tu ressens est valide et important. Prends le temps de respirer, tu traverses ce moment avec courage.';document.getElementById('emo-ai-box').style.display='block';}
+try{const data=await callClaude({model:'claude-haiku-4-5-20251001',max_tokens:280,messages:[{role:'user',content:`Tu es une thérapeute bienveillante. Une femme hypersensible de 43 ans exprime : "${feeling}"${context?' Contexte : "'+context+'"':''} Intensité : ${intensity}/100. Réponds en 3-4 phrases douces, sans conseils directifs. Valide, comprends, accompagne. En français, tutoie-la.`}]});const txt=data.content?.[0]?.text||'';if(txt){document.getElementById('emo-ai-text').textContent=txt;document.getElementById('emo-ai-box').style.display='block';if(inserted)await SB.from('emotions').update({reponse_ia:txt}).eq('id',inserted.id);}}catch(e){const msg=e&&e.message?e.message:String(e);console.error('IA:',msg);document.getElementById('emo-ai-text').textContent=msg.includes('no-endpoint')?"Configure l'URL IA dans ton Profil ✦":msg.includes('http-')?'Erreur connexion IA ('+msg+')':'Ce que tu ressens est valide et important. Prends le temps de respirer.';document.getElementById('emo-ai-box').style.display='block';}
 btn.innerHTML='Analyser avec l\'IA ✦';btn.disabled=false;toast('Émotion enregistrée ✓');}
-async function renderEmoHistory(){const{data}=await SB.from('emotions').select('*').order('created_at',{ascending:false}).limit(5);const el=document.getElementById('emo-history');if(!data||!data.length){el.innerHTML='<div style="text-align:center;padding:16px;color:var(--text-muted);font-size:12px;">Tes émotions apparaîtront ici</div>';return;}el.innerHTML=data.map(e=>{const dt=new Date(e.created_at);const dateStr=dt.toLocaleDateString('fr-FR')+' à '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});return'<div class="hist-item"><div class="hist-date">'+dateStr+'</div><div class="hist-text">'+e.ressenti+'</div></div>';}).join('');}
+async function renderEmoHistory(){
+  const d=ls();const lsEmo=d.emotions||[];
+  // Merge with Supabase data
+  let emotions=lsEmo;
+  try{const{data}=await SB.from('emotions').select('*').order('created_at',{ascending:false}).limit(20);if(data&&data.length)emotions=data;}catch(e){}
+  const el=document.getElementById('emo-history');
+  if(!emotions.length){el.innerHTML='<div style="text-align:center;padding:16px;color:var(--text-muted);font-size:12px;">Tes émotions apparaîtront ici</div>';return;}
+  el.innerHTML=emotions.slice(0,10).map((e,i)=>{
+    const dt=e.created_at?new Date(e.created_at):null;
+    const dateStr=e.date||(dt?dt.toLocaleDateString('fr-FR')+' à '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):'');
+    const id=e.id||i;
+    return '<div class="hist-item" id="emo-h-'+id+'" data-id="'+id+'" data-idx="'+i+'">'+
+      '<div class="hist-date">'+dateStr+'</div>'+
+      '<div class="hist-text">'+(e.ressenti||e.feeling||'')+'</div>'+
+      '<div class="hist-del-btn" onclick="delEmo(\''+id+'\','+i+')">🗑️</div>'+
+    '</div>';
+  }).join('');
+  // Attach swipe listeners
+  el.querySelectorAll('.hist-item').forEach(item=>attachSwipe(item));
+}
+
+function attachSwipe(el){
+  let startX=0;
+  el.addEventListener('touchstart',e=>{startX=e.touches[0].clientX;},{passive:true});
+  el.addEventListener('touchend',e=>{
+    const dx=startX-e.changedTouches[0].clientX;
+    if(dx>55)el.classList.add('swiped');
+    else if(dx<-20)el.classList.remove('swiped');
+  },{passive:true});
+}
+
+function delEmo(id,idx){
+  // Remove from localStorage
+  const d=ls();if(d.emotions){d.emotions.splice(idx,1);lsSave(d);}
+  // Remove from Supabase in background (if numeric id)
+  if(!isNaN(id))SB.from('emotions').delete().eq('id',+id).then(()=>{});
+  // Remove from DOM
+  const el=document.getElementById('emo-h-'+id);
+  if(el){el.style.transition='all 0.3s';el.style.opacity='0';el.style.maxHeight='0';el.style.padding='0';setTimeout(()=>el.remove(),300);}
+}
 
 // ── RÉFLEXION ─────────────────────────────────────────────
 async function saveGrats(){const g1=document.getElementById('g1').value.trim(),g2=document.getElementById('g2').value.trim(),g3=document.getElementById('g3').value.trim();if(!g1&&!g2&&!g3){toast('Écris au moins une gratitude');return;}const{error}=await SB.from('gratitudes').upsert({date_jour:todayISO(),g1,g2,g3},{onConflict:'date_jour'});if(error){toast('Erreur…');return;}await addTL('gratitude',[g1,g2,g3].filter(Boolean).join(' · '));toast('Gratitudes sauvegardées ✓');}
