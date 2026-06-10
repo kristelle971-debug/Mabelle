@@ -353,30 +353,34 @@ canvas{display:block;}
         <textarea class="text-input" id="emo-context" rows="2" placeholder="Ce qui s'est passé…"></textarea>
       </div>
       <div class="intensity-row"><span class="intensity-lbl">Intensité</span><div class="intensity-bar"><div class="intensity-fill" id="int-fill" style="width:50%"></div><input type="range" class="int-slider" min="0" max="100" value="50" step="1" oninput="setInt(this.value)"></div><span class="intensity-num" id="int-num">50</span></div>
-
-      <!-- ÉTAPE 2 : lien contextuel -->
-      <div id="emo-step2" style="margin-top:4px;margin-bottom:12px;">
-        <div class="card-title" style="margin-bottom:8px;">Mon ressenti est-il lié à ce contexte ?</div>
-        <div class="lien-grid" id="lien-grid">
-          <div class="lien-btn" onclick="setLien('oui')">✓ Oui, clairement</div>
-          <div class="lien-btn" onclick="setLien('partiel')">~ En partie</div>
-          <div class="lien-btn" onclick="setLien('non')">✗ Pas vraiment</div>
-          <div class="lien-btn" onclick="setLien('sais-pas')">? Je ne sais pas</div>
-        </div>
-      </div>
-
-      <!-- ÉTAPE 3 : besoins — apparaît après avoir répondu à la question -->
-      <div id="emo-step3" style="display:none;margin-bottom:14px;">
-        <div class="card-title" style="margin-bottom:3px;" id="needs-title">Ce dont j'ai besoin en ce moment</div>
-        <div style="font-size:10px;color:var(--text-muted);margin-bottom:9px;">Coche ce qui résonne pour toi, même instinctivement</div>
-        <div class="needs-grid" id="needs-grid"></div>
-        <div style="font-size:10px;color:var(--text-muted);margin-top:8px;font-style:italic;">Tu peux ne rien cocher si rien ne résonne.</div>
-      </div>
-
-      <!-- BOUTON ANALYSE — toujours visible -->
       <button class="action-btn btn-primary" id="emo-btn" onclick="analyzeEmo()">Analyser avec l'IA ✦</button>
       <div class="ai-block blue" id="anchor-box"><div class="ai-tag blue">⚓ PHRASE D'ANCRAGE</div><div class="ai-text" id="anchor-text"></div></div>
       <div class="ai-block violet" id="emo-ai-box"><div class="ai-tag violet">✦ ÉCLAIRAGE BIENVEILLANT</div><div class="ai-text" id="emo-ai-text"></div></div>
+
+      <!-- PHASE 2 : apparaît APRÈS l'analyse IA -->
+      <div id="emo-phase2" style="display:none;margin-top:16px;border-top:1px solid var(--border-light);padding-top:16px;">
+        <div class="card-title" style="margin-bottom:8px;">Quelle émotion reconnais-tu dans ce contexte ?</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:10px;">Coche ce qui correspond le mieux à ce que tu as ressenti</div>
+        <div class="needs-grid" id="emo-type-grid"></div>
+
+        <!-- LIEN CONTEXTUEL -->
+        <div style="margin-top:14px;">
+          <div class="card-title" style="margin-bottom:8px;">Mon ressenti est-il lié à ce contexte ?</div>
+          <div class="lien-grid" id="lien-grid">
+            <div class="lien-btn" onclick="setLien('oui')">✓ Oui, clairement</div>
+            <div class="lien-btn" onclick="setLien('partiel')">~ En partie</div>
+            <div class="lien-btn" onclick="setLien('non')">✗ Pas vraiment</div>
+            <div class="lien-btn" onclick="setLien('sais-pas')">? Je ne sais pas</div>
+          </div>
+        </div>
+
+        <!-- PHASE 3 : besoins — apparaît quand une émotion est cochée -->
+        <div id="emo-phase3" style="display:none;margin-top:14px;">
+          <div class="card-title" style="margin-bottom:4px;" id="needs-title">Ce dont tu as besoin</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-bottom:9px;">Coche ce qui résonne, même instinctivement</div>
+          <div class="needs-grid" id="needs-grid"></div>
+        </div>
+      </div>
     </div>
     <div class="card"><div class="card-title">Historique</div><div id="emo-history"><div style="text-align:center;padding:16px;color:var(--text-muted);font-size:12px;">Chargement…</div></div></div>
     <div class="safe-bottom"></div>
@@ -565,40 +569,65 @@ const NEEDS=[
   {id:'connexion',l:'❤️ Connexion'},{id:'tendresse',l:'🥰 Tendresse'},
   {id:'espace',l:'🌸 Espace & liberté'},{id:'clarte',l:'💡 Clarté'},
   {id:'repos',l:'😴 Repos'},{id:'legerete',l:'☀️ Légèreté'},
+  {id:'entendue',l:'👂 Être entendue'},{id:'presence',l:'🫶 Présence'},
 ];
 
-// Emotion state
+// Mapping émotion → besoins suggérés
+const EMO_NEEDS_MAP={
+  'fragile':    ['securite','rassuree','stable','solide','soutenue','confiante','ancree','protegee'],
+  'blessée':    ['securite','protegee','tendresse','comprise','rassuree','soutenue'],
+  'angoissée':  ['securite','calme','ancree','stable','clarte','rassuree'],
+  'triste':     ['connexion','soutenue','tendresse','comprise','presence','entendue'],
+  'seule':      ['connexion','presence','soutenue','tendresse','entendue','acceptee'],
+  'en colère':  ['entendue','reconnue','clarte','espace','respect','validee'],
+  'incomprise': ['comprise','validee','entendue','reconnue','connexion'],
+  'débordée':   ['espace','repos','calme','soutenue','legerete','stable'],
+  'déçue':      ['entendue','connexion','comprise','validee','rassuree'],
+  'perdue':     ['clarte','ancree','stable','guidee','soutenue','securite'],
+  'honteuse':   ['acceptee','rassuree','tendresse','validee','soutenue'],
+  'tendue':     ['calme','repos','espace','securite','legerete','ancree'],
+};
+
+const EMO_TYPES=[
+  {id:'fragile',l:'💔 Fragile'},{id:'blessée',l:'🤕 Blessée'},
+  {id:'angoissée',l:'😰 Angoissée'},{id:'triste',l:'😢 Triste'},
+  {id:'seule',l:'🫂 Seule'},{id:'en colère',l:'😤 En colère'},
+  {id:'incomprise',l:'😶 Incomprise'},{id:'débordée',l:'😵 Débordée'},
+  {id:'déçue',l:'😔 Déçue'},{id:'perdue',l:'😕 Perdue'},
+  {id:'honteuse',l:'😳 Honteuse'},{id:'tendue',l:'😬 Tendue'},
+];
+
 let S_emoLien=null;
+let S_emoType=null;
 const S_emoNeeds=new Set();
+
+function renderEmoTypes(){
+  const g=document.getElementById('emo-type-grid');
+  if(!g)return;
+  g.innerHTML=EMO_TYPES.map(e=>`<div class="need-chip${S_emoType===e.id?' active':''}" onclick="selectEmoType('${e.id}')">${e.l}</div>`).join('');
+}
+
+function selectEmoType(id){
+  S_emoType=id;S_emoNeeds.clear();
+  renderEmoTypes();
+  // Afficher les besoins liés à cette émotion
+  const phase3=document.getElementById('emo-phase3');
+  phase3.style.display='block';phase3.style.animation='fadeUp 0.3s ease both';
+  document.getElementById('needs-title').textContent='Ce dont tu as besoin quand tu te sens '+id+' …';
+  renderNeeds(EMO_NEEDS_MAP[id]||[]);
+}
+
+function renderNeeds(filter){
+  const g=document.getElementById('needs-grid');if(!g)return;
+  const list=filter&&filter.length?NEEDS.filter(n=>filter.includes(n.id)):NEEDS;
+  g.innerHTML=list.map(n=>`<div class="need-chip${S_emoNeeds.has(n.id)?' active':''}" onclick="toggleNeed('${n.id}')">${n.l}</div>`).join('');
+}
+
+function toggleNeed(id){if(S_emoNeeds.has(id))S_emoNeeds.delete(id);else S_emoNeeds.add(id);renderNeeds(S_emoType?EMO_NEEDS_MAP[S_emoType]:[]);}
 
 function setLien(val){
   S_emoLien=val;
-  document.querySelectorAll('.lien-btn').forEach((b,i)=>{
-    b.classList[['oui','partiel','non','sais-pas'][i]===val?'add':'remove']('active');
-  });
-  // Révéler la section besoins avec un titre adapté
-  const step3=document.getElementById('emo-step3');
-  const titles={
-    'oui':'Ce dont tu as besoin pour traverser ce moment…',
-    'partiel':'Ce qui pourrait t\'aider, au-delà de la situation…',
-    'non':'Ce dont tu as besoin indépendamment de ce contexte…',
-    'sais-pas':'Explore ce qui pourrait te faire du bien en ce moment…'
-  };
-  document.getElementById('needs-title').textContent=titles[val]||'Ce dont j\'ai besoin en ce moment';
-  step3.style.display='block';
-  step3.style.animation='fadeUp 0.35s ease both';
-  renderNeeds();
-}
-
-function renderNeeds(){
-  const g=document.getElementById('needs-grid');
-  if(!g)return;
-  g.innerHTML=NEEDS.map(n=>`<div class="need-chip${S_emoNeeds.has(n.id)?' active':''}" onclick="toggleNeed('${n.id}')">${n.l}</div>`).join('');
-}
-
-function toggleNeed(id){
-  if(S_emoNeeds.has(id))S_emoNeeds.delete(id);else S_emoNeeds.add(id);
-  renderNeeds();
+  document.querySelectorAll('.lien-btn').forEach((b,i)=>{b.classList[['oui','partiel','non','sais-pas'][i]===val?'add':'remove']('active');});
 }
 
 // ── NAVIGATION ────────────────────────────────────────────
@@ -610,7 +639,13 @@ function onEnter(id){
   if(id==='journal-screen'){renderCalendar();renderCoupleStats();renderHealthUI();setTimeout(renderHealthCharts,80);}
   if(id==='reflexion-screen'){renderRefCit();renderMyCits();}
   if(id==='timeline-screen'){renderTLPeriodUI();renderGStats();renderTimeline();}
-  if(id==='emotions-screen'){S_emoLien=null;S_emoNeeds.clear();renderEmoHistory();setTimeout(renderNeeds,50);}
+  if(id==='emotions-screen'){
+    S_emoLien=null;S_emoType=null;S_emoNeeds.clear();
+    const p2=document.getElementById('emo-phase2');if(p2)p2.style.display='none';
+    const p3=document.getElementById('emo-phase3');if(p3)p3.style.display='none';
+    document.querySelectorAll('.lien-btn').forEach(b=>b.classList.remove('active'));
+    renderEmoHistory();
+  }
   if(id==='profile-screen'){loadAiUrl();}
 }
 
@@ -720,23 +755,7 @@ async function analyzeEmo(){
   const{data:inserted}=await SB.from('emotions').insert({ressenti:feeling,intensite:+intensity,ancrage:anchor,reponse_ia:''}).select().single();
   addTL('emotion',feeling+' (intensité : '+intensity+')');
   renderEmoHistory();
-  // IA avec contexte enrichi
-  const prompt=`Tu es une thérapeute bienveillante spécialisée en hypersensibilité. Une femme de 43 ans a partagé :
-
-Émotion ressentie : "${feeling}"
-${context?'Contexte : "'+context+'"':''}
-Intensité : ${intensity}/100
-${lienTexte?'Lien ressenti avec le contexte : '+lienTexte:''}
-${needsTexte?'Besoins identifiés par elle : '+needsTexte:''}
-
-RÈGLES ABSOLUES :
-- Ne pose AUCUNE question. Zéro question. Uniquement des affirmations et des éclairages.
-- Tu n'es pas dans un échange, tu offres un miroir bienveillant.
-- 3 à 4 phrases maximum.
-- Si des besoins sont identifiés, valide-les et éclaire ce qu'ils révèlent sur l'émotion.
-- Si le lien avec le contexte est flou ou absent, éclaire ce que ça peut signifier (émotion de fond, sensibilité accumulée, etc.)
-- Aide à comprendre l'émotion, pas à la résoudre.
-- En français, tutoie-la, sois douce et précise.`;
+  // IA
   try{
     const data=await callClaude({model:'claude-haiku-4-5-20251001',max_tokens:350,messages:[{role:'user',content:prompt}]});
     const txt=data.content?.[0]?.text||'';
@@ -752,11 +771,11 @@ RÈGLES ABSOLUES :
     document.getElementById('emo-ai-text').textContent=msg.includes('no-endpoint')?"Configure l'URL IA dans ton Profil ✦":msg.includes('http-')?'Erreur connexion IA':'Ce que tu ressens est valide. Prends le temps de respirer.';
     document.getElementById('emo-ai-box').style.display='block';
   }
+  // Révéler phase 2 après l'analyse
+  const p2=document.getElementById('emo-phase2');
+  p2.style.display='block';p2.style.animation='fadeUp 0.4s ease both';
+  renderEmoTypes();
   btn.innerHTML="Analyser avec l'IA ✦";btn.disabled=false;toast('Émotion enregistrée ✓');
-  // Reset
-  S_emoLien=null;S_emoNeeds.clear();
-  document.querySelectorAll('.lien-btn').forEach(b=>b.classList.remove('active'));
-  renderNeeds();
 }
 async function renderEmoHistory(){
   const d=ls();const lsEmo=d.emotions||[];
