@@ -771,11 +771,34 @@ async function analyzeEmo(){
     document.getElementById('emo-ai-text').textContent=msg.includes('no-endpoint')?"Configure l'URL IA dans ton Profil ✦":msg.includes('http-')?'Erreur connexion IA':'Ce que tu ressens est valide. Prends le temps de respirer.';
     document.getElementById('emo-ai-box').style.display='block';
   }
-  // Révéler phase 2 après l'analyse
+  // Révéler phase 2 après l'analyse + transformer le bouton
   const p2=document.getElementById('emo-phase2');
   p2.style.display='block';p2.style.animation='fadeUp 0.4s ease both';
   renderEmoTypes();
-  btn.innerHTML="Analyser avec l'IA ✦";btn.disabled=false;toast('Émotion enregistrée ✓');
+  btn.innerHTML="✎ Nouvelle entrée";
+  btn.onclick=resetEmoForm;
+  btn.className='action-btn btn-secondary';
+  btn.disabled=false;
+  toast('Émotion enregistrée ✓');
+}
+
+function resetEmoForm(){
+  // Réinitialiser tout le formulaire
+  document.getElementById('emo-feeling').value='';
+  document.getElementById('emo-context').value='';
+  document.getElementById('int-fill').style.width='50%';
+  document.getElementById('int-num').textContent='50';
+  document.querySelector('.int-slider').value=50;
+  document.getElementById('anchor-box').style.display='none';
+  document.getElementById('emo-ai-box').style.display='none';
+  document.getElementById('emo-phase2').style.display='none';
+  document.getElementById('emo-phase3').style.display='none';
+  document.querySelectorAll('.lien-btn').forEach(b=>b.classList.remove('active'));
+  S_emoLien=null;S_emoType=null;S_emoNeeds.clear();
+  const btn=document.getElementById('emo-btn');
+  btn.innerHTML="Analyser avec l'IA ✦";
+  btn.onclick=analyzeEmo;
+  btn.className='action-btn btn-primary';
 }
 async function renderEmoHistory(){
   const d=ls();const lsEmo=d.emotions||[];
