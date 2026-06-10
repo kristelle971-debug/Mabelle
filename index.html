@@ -347,28 +347,36 @@ canvas{display:block;}
   <div class="scroll-area">
     <div class="card">
       <div class="card-title">Ce que je ressens en ce moment</div>
-      <textarea class="text-input" id="emo-feeling" rows="3" placeholder="Je ressens… (colère, tristesse, joie, angoisse…)"></textarea>
-      <div style="margin-top:12px;"><div class="card-title">Contexte (optionnel)</div><textarea class="text-input" id="emo-context" rows="2" placeholder="Ce qui s'est passé…"></textarea></div>
+      <textarea class="text-input" id="emo-feeling" rows="3" placeholder="Je ressens… (colère, tristesse, fragile, angoisse…)"></textarea>
+      <div style="margin-top:12px;">
+        <div class="card-title">Contexte (optionnel)</div>
+        <textarea class="text-input" id="emo-context" rows="2" placeholder="Ce qui s'est passé…"></textarea>
+      </div>
       <div class="intensity-row"><span class="intensity-lbl">Intensité</span><div class="intensity-bar"><div class="intensity-fill" id="int-fill" style="width:50%"></div><input type="range" class="int-slider" min="0" max="100" value="50" step="1" oninput="setInt(this.value)"></div><span class="intensity-num" id="int-num">50</span></div>
-      <!-- LIEN CONTEXTUEL -->
-      <div style="margin-top:4px;margin-bottom:12px;">
+
+      <!-- ÉTAPE 2 : lien contextuel -->
+      <div id="emo-step2" style="margin-top:4px;margin-bottom:12px;">
         <div class="card-title" style="margin-bottom:8px;">Mon ressenti est-il lié à ce contexte ?</div>
         <div class="lien-grid" id="lien-grid">
           <div class="lien-btn" onclick="setLien('oui')">✓ Oui, clairement</div>
-          <div class="lien-btn" onclick="setLien('partiel')">~ En partie seulement</div>
+          <div class="lien-btn" onclick="setLien('partiel')">~ En partie</div>
           <div class="lien-btn" onclick="setLien('non')">✗ Pas vraiment</div>
           <div class="lien-btn" onclick="setLien('sais-pas')">? Je ne sais pas</div>
         </div>
       </div>
-      <!-- BESOINS -->
-      <div style="margin-bottom:12px;">
-        <div class="card-title" style="margin-bottom:4px;">Ce dont j'ai besoin en ce moment</div>
-        <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">Touche ce qui résonne pour toi</div>
+
+      <!-- ÉTAPE 3 : besoins — apparaît après avoir répondu à la question -->
+      <div id="emo-step3" style="display:none;margin-bottom:14px;">
+        <div class="card-title" style="margin-bottom:3px;" id="needs-title">Ce dont j'ai besoin en ce moment</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:9px;">Coche ce qui résonne pour toi, même instinctivement</div>
         <div class="needs-grid" id="needs-grid"></div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:8px;font-style:italic;">Tu peux ne rien cocher si rien ne résonne.</div>
       </div>
+
+      <!-- BOUTON ANALYSE — toujours visible -->
       <button class="action-btn btn-primary" id="emo-btn" onclick="analyzeEmo()">Analyser avec l'IA ✦</button>
       <div class="ai-block blue" id="anchor-box"><div class="ai-tag blue">⚓ PHRASE D'ANCRAGE</div><div class="ai-text" id="anchor-text"></div></div>
-      <div class="ai-block violet" id="emo-ai-box"><div class="ai-tag violet">✦ RÉFLEXION BIENVEILLANTE</div><div class="ai-text" id="emo-ai-text"></div></div>
+      <div class="ai-block violet" id="emo-ai-box"><div class="ai-tag violet">✦ ÉCLAIRAGE BIENVEILLANT</div><div class="ai-text" id="emo-ai-text"></div></div>
     </div>
     <div class="card"><div class="card-title">Historique</div><div id="emo-history"><div style="text-align:center;padding:16px;color:var(--text-muted);font-size:12px;">Chargement…</div></div></div>
     <div class="safe-bottom"></div>
@@ -568,6 +576,18 @@ function setLien(val){
   document.querySelectorAll('.lien-btn').forEach((b,i)=>{
     b.classList[['oui','partiel','non','sais-pas'][i]===val?'add':'remove']('active');
   });
+  // Révéler la section besoins avec un titre adapté
+  const step3=document.getElementById('emo-step3');
+  const titles={
+    'oui':'Ce dont tu as besoin pour traverser ce moment…',
+    'partiel':'Ce qui pourrait t\'aider, au-delà de la situation…',
+    'non':'Ce dont tu as besoin indépendamment de ce contexte…',
+    'sais-pas':'Explore ce qui pourrait te faire du bien en ce moment…'
+  };
+  document.getElementById('needs-title').textContent=titles[val]||'Ce dont j\'ai besoin en ce moment';
+  step3.style.display='block';
+  step3.style.animation='fadeUp 0.35s ease both';
+  renderNeeds();
 }
 
 function renderNeeds(){
@@ -701,15 +721,22 @@ async function analyzeEmo(){
   addTL('emotion',feeling+' (intensité : '+intensity+')');
   renderEmoHistory();
   // IA avec contexte enrichi
-  const prompt=`Tu es une thérapeute bienveillante spécialisée en hypersensibilité. Une femme de 43 ans exprime :
+  const prompt=`Tu es une thérapeute bienveillante spécialisée en hypersensibilité. Une femme de 43 ans a partagé :
 
-Émotion : "${feeling}"
+Émotion ressentie : "${feeling}"
 ${context?'Contexte : "'+context+'"':''}
 Intensité : ${intensity}/100
-${lienTexte?'Lien avec le contexte : '+lienTexte:''}
-${needsTexte?needsTexte:''}
+${lienTexte?'Lien ressenti avec le contexte : '+lienTexte:''}
+${needsTexte?'Besoins identifiés par elle : '+needsTexte:''}
 
-Guide-la en 3-4 phrases douces et perspicaces. Si des besoins sont identifiés, valide-les et aide-la à comprendre ce qu'ils révèlent. Si le lien avec le contexte est flou, aide-la à explorer ça. Pas de conseils non demandés. En français, tutoie-la.`;
+RÈGLES ABSOLUES :
+- Ne pose AUCUNE question. Zéro question. Uniquement des affirmations et des éclairages.
+- Tu n'es pas dans un échange, tu offres un miroir bienveillant.
+- 3 à 4 phrases maximum.
+- Si des besoins sont identifiés, valide-les et éclaire ce qu'ils révèlent sur l'émotion.
+- Si le lien avec le contexte est flou ou absent, éclaire ce que ça peut signifier (émotion de fond, sensibilité accumulée, etc.)
+- Aide à comprendre l'émotion, pas à la résoudre.
+- En français, tutoie-la, sois douce et précise.`;
   try{
     const data=await callClaude({model:'claude-haiku-4-5-20251001',max_tokens:350,messages:[{role:'user',content:prompt}]});
     const txt=data.content?.[0]?.text||'';
