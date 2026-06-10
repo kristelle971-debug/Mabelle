@@ -548,7 +548,17 @@ function saveAiUrl(){const v=document.getElementById('ai-url-inp').value.trim();
 // ── MOODS ─────────────────────────────────────────────────
 function setMood(i,v){S.moods[i]=+v;document.getElementById('mf'+i).style.width=v+'%';document.getElementById('mv'+i).textContent=Math.round(v/10)+' / 10';document.getElementById('me'+i).textContent=MOOD_E[i][Math.min(9,Math.floor(v/10))];}
 async function setMoodDate(dateStr){const{data}=await SB.from('humeurs').select('*').eq('date_jour',dateStr).maybeSingle();const vals=data?[data.general,data.couple,data.energie]:[50,50,50];vals.forEach((v,i)=>{setMood(i,v);document.querySelectorAll('.mood-slider')[i].value=v;});}
-async function saveMoods(){const dateEl=document.getElementById('humeur-date');const dateStr=dateEl&&dateEl.value?dateEl.value:todayISO();const{error}=await SB.from('humeurs').upsert({date_jour:dateStr,general:S.moods[0],couple:S.moods[1],energie:S.moods[2]},{onConflict:'date_jour'});if(error){toast('Erreur : '+(error.message||error));return;}if(dateStr===todayISO())await addTL('mood','Humeurs du jour',{m:[...S.moods]});renderMoodHistory();toast('Humeurs sauvegardées ✓');}
+async function saveMoods(){
+  const dateEl=document.getElementById('humeur-date');
+  const dateStr=dateEl&&dateEl.value?dateEl.value:todayISO();
+  // localStorage immédiat
+  const d=ls();if(!d.moods)d.moods={};d.moods[dateStr]=[...S.moods];lsSave(d);
+  toast('Humeurs sauvegardées ✓');
+  renderMoodHistory();
+  // Supabase en arrière-plan
+  SB.from('humeurs').upsert({date_jour:dateStr,general:S.moods[0],couple:S.moods[1],energie:S.moods[2]},{onConflict:'date_jour'}).then(()=>{});
+  if(dateStr===todayISO())SB.from('timeline').insert({type:'mood',texte:'Humeurs du jour',meta:{m:[...S.moods]}}).then(()=>{});
+}
 async function setCompteurDate(dateStr){const{data}=await SB.from('compteurs').select('*').eq('date_jour',dateStr).maybeSingle();S.cig=data?data.cigarettes:0;S.alc=data?data.alcool:0;S.water=data?data.eau:0;S.sport=data?data.sport:false;S.meditation=data?data.meditation:false;document.getElementById('cig-n').textContent=S.cig;document.getElementById('alc-n').textContent=S.alc;document.getElementById('chk-sport').classList[S.sport?'add':'remove']('checked');document.getElementById('chk-meditation').classList[S.meditation?'add':'remove']('checked');renderHydr();}
 async function renderMoodHistory(){const{data}=await SB.from('humeurs').select('date_jour,general,couple,energie').order('date_jour',{ascending:false}).limit(7);const el=document.getElementById('mood-history');if(!el)return;if(!data||!data.length){el.innerHTML='<div style="text-align:center;padding:12px;color:var(--text-muted);font-size:12px;">Enregistre tes humeurs pour bâtir ton historique</div>';return;}const WD=['dim','lun','mar','mer','jeu','ven','sam'],MO=['jan','fév','mar','avr','mai','juin','juil','août','sep','oct','nov','déc'];const NAMES=['Gén','Cpl','Éng'];const KEYS=['general','couple','energie'];el.innerHTML=data.map(r=>{const dt=new Date(r.date_jour+'T12:00:00');const lbl=WD[dt.getDay()]+' '+dt.getDate()+' '+MO[dt.getMonth()];return'<div class="moodh-row"><div class="moodh-date">'+lbl+'</div><div class="moodh-dots">'+KEYS.map((k,i)=>'<div class="moodh-dot-item"><div class="moodh-dot" style="background:'+moodColor(r[k])+'"></div><div class="moodh-dot-lbl">'+NAMES[i]+'</div></div>').join('')+'</div></div>';}).join('');}
 
@@ -557,7 +567,14 @@ function renderHydr(){document.getElementById('hydr-fill').style.width=(S.water/
 function adjWater(delta){S.water=Math.max(0,Math.min(8,S.water+delta));renderHydr();saveCntrs();}
 function adjCnt(t,delta){if(t==='cig'){S.cig=Math.max(0,S.cig+delta);document.getElementById('cig-n').textContent=S.cig;}if(t==='alc'){S.alc=Math.max(0,S.alc+delta);document.getElementById('alc-n').textContent=S.alc;}saveCntrs();}
 function toggleCheck(key){S[key]=!S[key];document.getElementById('chk-'+key).classList[S[key]?'add':'remove']('checked');saveCntrs();}
-async function saveCntrs(){const dateEl=document.getElementById('compteur-date');const dateStr=dateEl&&dateEl.value?dateEl.value:todayISO();await SB.from('compteurs').upsert({date_jour:dateStr,eau:S.water,cigarettes:S.cig,alcool:S.alc,sport:S.sport,meditation:S.meditation},{onConflict:'date_jour'});}
+function saveCntrs(){
+  const dateEl=document.getElementById('compteur-date');
+  const dateStr=dateEl&&dateEl.value?dateEl.value:todayISO();
+  // localStorage immédiat
+  const d=ls();if(!d.cnt)d.cnt={};d.cnt[dateStr]={eau:S.water,cig:S.cig,alc:S.alc,sport:S.sport,med:S.meditation};lsSave(d);
+  // Supabase en arrière-plan
+  SB.from('compteurs').upsert({date_jour:dateStr,eau:S.water,cigarettes:S.cig,alcool:S.alc,sport:S.sport,meditation:S.meditation},{onConflict:'date_jour'}).then(()=>{});
+}
 
 // ── LOAD TODAY ────────────────────────────────────────────
 async function loadTodayData(){const today=todayISO();
@@ -571,7 +588,15 @@ document.getElementById('cig-n').textContent=S.cig;document.getElementById('alc-
 
 // ── COUPLE ────────────────────────────────────────────────
 function renderCoupleGrid(){const g=document.getElementById('couple-grid');g.innerHTML='';COUPLE.forEach((c,i)=>{const div=document.createElement('div');div.className='emoji-btn'+(S.coupleIdx===i?' selected':'');div.innerHTML='<span class="emoji-big">'+c.e+'</span><span class="emoji-lbl">'+c.l+'</span>';div.onclick=()=>{S.coupleIdx=i;renderCoupleGrid();};g.appendChild(div);});}
-async function saveCouple(){if(S.coupleIdx===null){toast('Sélectionne une catégorie');return;}const{error}=await SB.from('couple_journal').upsert({date_jour:todayISO(),categorie:S.coupleIdx},{onConflict:'date_jour'});if(error){toast('Erreur…');return;}await addTL('couple','Journée couple : '+COUPLE[S.coupleIdx].e+' '+COUPLE[S.coupleIdx].l);toast('Journée enregistrée ✓');}
+function saveCouple(){
+  if(S.coupleIdx===null){toast('👆 Sélectionne une catégorie ci-dessus');return;}
+  // localStorage immédiat
+  const d=ls();if(!d.couple)d.couple={};d.couple[todayISO()]=S.coupleIdx;lsSave(d);
+  toast('Journée enregistrée ✓');
+  // Supabase en arrière-plan
+  SB.from('couple_journal').upsert({date_jour:todayISO(),categorie:S.coupleIdx},{onConflict:'date_jour'}).then(()=>{});
+  SB.from('timeline').insert({type:'couple',texte:'Journée couple : '+COUPLE[S.coupleIdx].e+' '+COUPLE[S.coupleIdx].l,meta:null}).then(()=>{});
+}
 
 // ── ÉMOTIONS ──────────────────────────────────────────────
 function setInt(v){document.getElementById('int-fill').style.width=v+'%';document.getElementById('int-num').textContent=v;}
@@ -595,13 +620,70 @@ try{const data=await callClaude({model:'claude-haiku-4-5-20251001',max_tokens:32
 btn.innerHTML='Analyse IA ✦';btn.disabled=false;toast('Pensée enregistrée ✓');}
 
 // ── CALENDRIER ────────────────────────────────────────────
-async function renderCalendar(){const y=S.calYear,m=S.calMonth;const startISO=y+'-'+pad(m+1)+'-01';const endISO=y+'-'+pad(m+1)+'-'+pad(new Date(y,m+1,0).getDate());const{data:cd}=await SB.from('couple_journal').select('date_jour,categorie').gte('date_jour',startISO).lte('date_jour',endISO);const byDate={};(cd||[]).forEach(r=>{byDate[r.date_jour]=r.categorie;});const months=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'],days=['L','M','M','J','V','S','D'];document.getElementById('cal-title').textContent=months[m]+' '+y;const g=document.getElementById('cal-grid');g.innerHTML=days.map(x=>'<div class="cal-day-lbl">'+x+'</div>').join('');const first=new Date(y,m,1).getDay(),adj=(first===0)?6:first-1;for(let i=0;i<adj;i++)g.innerHTML+='<div class="cal-day empty"></div>';const dim=new Date(y,m+1,0).getDate(),today=new Date();today.setHours(23,59,59,999);for(let day=1;day<=dim;day++){const dayDate=new Date(y,m,day);const k=y+'-'+pad(m+1)+'-'+pad(day);const isToday=day===new Date().getDate()&&m===new Date().getMonth()&&y===new Date().getFullYear();const isFuture=dayDate>today;const isPast=dayDate<new Date(2024,11,1);const ei=byDate[k];const div=document.createElement('div');div.className='cal-day'+(isToday?' today':'')+(isFuture||isPast?' future':'');div.innerHTML='<span class="cal-day-num">'+day+'</span>'+(ei!==undefined?'<span class="cal-day-emoji">'+COUPLE[ei].e+'</span>':'');if(ei!==undefined&&!isFuture&&!isPast)div.style.background='rgba('+hexToRgb(CAT_COLORS[ei])+',0.16)';if(!isFuture&&!isPast)div.onclick=()=>openDayModal(y,m,day);g.appendChild(div);}}
+async function renderCalendar(){
+  const y=S.calYear,m=S.calMonth;
+  // localStorage d'abord (instantané)
+  const lsData=ls();const lsCouple=lsData.couple||{};
+  renderCalGrid(y,m,lsCouple);
+  // Supabase en arrière-plan
+  try{
+    const startISO=y+'-'+pad(m+1)+'-01';const endISO=y+'-'+pad(m+1)+'-'+pad(new Date(y,m+1,0).getDate());
+    const{data:cd}=await SB.from('couple_journal').select('date_jour,categorie').gte('date_jour',startISO).lte('date_jour',endISO);
+    if(cd&&cd.length){const sbCouple={};cd.forEach(r=>{sbCouple[r.date_jour]=r.categorie;const[yy,mm,dd]=r.date_jour.split('-');const k=yy+'-'+parseInt(mm)+'-'+parseInt(dd);sbCouple[k]=r.categorie;});renderCalGrid(y,m,{...lsCouple,...sbCouple});}
+  }catch(e){}
+}
+function renderCalGrid(y,m,coupleData){
+  const months=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'],days=['L','M','M','J','V','S','D'];
+  document.getElementById('cal-title').textContent=months[m]+' '+y;
+  const g=document.getElementById('cal-grid');
+  g.innerHTML=days.map(x=>'<div class="cal-day-lbl">'+x+'</div>').join('');
+  const first=new Date(y,m,1).getDay(),adj=(first===0)?6:first-1;
+  for(let i=0;i<adj;i++)g.innerHTML+='<div class="cal-day empty"></div>';
+  const dim=new Date(y,m+1,0).getDate(),today=new Date();today.setHours(23,59,59,999);
+  for(let day=1;day<=dim;day++){
+    const k=y+'-'+(m+1)+'-'+day;
+    const dayDate=new Date(y,m,day);
+    const isToday=day===new Date().getDate()&&m===new Date().getMonth()&&y===new Date().getFullYear();
+    const isFuture=dayDate>today;const isPast=dayDate<new Date(2024,11,1);
+    const ei=coupleData[k];
+    const div=document.createElement('div');
+    div.className='cal-day'+(isToday?' today':'')+(isFuture||isPast?' future':'');
+    div.innerHTML='<span class="cal-day-num">'+day+'</span>'+(ei!==undefined?'<span class="cal-day-emoji">'+COUPLE[ei].e+'</span>':'');
+    if(ei!==undefined&&!isFuture&&!isPast)div.style.background='rgba('+hexToRgb(CAT_COLORS[ei])+',0.16)';
+    if(!isFuture&&!isPast)div.onclick=()=>openDayModal(y,m,day);
+    g.appendChild(div);
+  }
+}
 async function calNav(d){S.calMonth+=d;if(S.calMonth>11){S.calMonth=0;S.calYear++;}if(S.calMonth<0){S.calMonth=11;S.calYear--;}if(S.calYear<2024||(S.calYear===2024&&S.calMonth<11)){S.calMonth=11;S.calYear=2024;}await renderCalendar();await renderCoupleStats();}
 async function renderCoupleStats(){const y=S.calYear,m=S.calMonth;const dim=new Date(y,m+1,0).getDate();const{data:cd}=await SB.from('couple_journal').select('categorie').gte('date_jour',y+'-'+pad(m+1)+'-01').lte('date_jour',y+'-'+pad(m+1)+'-'+pad(dim));const counts=Array(9).fill(0);(cd||[]).forEach(r=>counts[r.categorie]++);const total=counts.reduce((a,b)=>a+b,0);const el=document.getElementById('couple-stats');if(!total){el.innerHTML='<div style="text-align:center;padding:14px;color:var(--text-muted);font-size:12px;">Aucune donnée ce mois-ci</div>';return;}el.innerHTML=COUPLE.map((c,i)=>{if(!counts[i])return'';const pct=Math.round(counts[i]/total*100);return'<div class="stat-row"><div class="stat-emoji">'+c.e+'</div><div class="stat-bar-track"><div class="stat-bar-fill" style="width:'+pct+'%;background:'+CAT_COLORS[i]+'"></div></div><div class="stat-pct">'+pct+'%</div><div class="stat-count">'+counts[i]+'j</div></div>';}).join('');}
 
 // ── MODAL CALENDRIER ──────────────────────────────────────
-async function openDayModal(year,month,day){S.modalDate={year,month,day};const k=year+'-'+pad(month+1)+'-'+pad(day);const{data:cur}=await SB.from('couple_journal').select('categorie').eq('date_jour',k).maybeSingle();const ei=cur?cur.categorie:undefined;const WD=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'],MO=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];const dt=new Date(year,month,day);document.getElementById('day-modal-title').textContent=WD[dt.getDay()]+' '+day+' '+MO[month]+' '+year;const grid=document.getElementById('day-modal-grid');grid.innerHTML='';COUPLE.forEach((c,i)=>{const div=document.createElement('div');div.className='emoji-btn'+(ei===i?' selected':'');div.innerHTML='<span class="emoji-big">'+c.e+'</span><span class="emoji-lbl">'+c.l+'</span>';div.onclick=()=>setDayCouple(i);grid.appendChild(div);});document.getElementById('day-modal').classList.add('show');}
-async function setDayCouple(i){const{year,month,day}=S.modalDate;const k=year+'-'+pad(month+1)+'-'+pad(day);await SB.from('couple_journal').upsert({date_jour:k,categorie:i},{onConflict:'date_jour'});await addTL('couple','Journée couple : '+COUPLE[i].e+' '+COUPLE[i].l);closeDayModal();await renderCalendar();await renderCoupleStats();toast('Journée enregistrée ✓');}
+async function openDayModal(year,month,day){
+  S.modalDate={year,month,day};
+  const k=year+'-'+(month+1)+'-'+day;
+  // Check localStorage first (instantané)
+  const lsData=ls();const lsCouple=lsData.couple||{};
+  let ei=lsCouple[k];
+  // Also check Supabase in background
+  const sbKey=year+'-'+pad(month+1)+'-'+pad(day);
+  SB.from('couple_journal').select('categorie').eq('date_jour',sbKey).maybeSingle().then(({data:cur})=>{if(cur&&cur.categorie!==undefined)ei=cur.categorie;});
+  const WD=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'],MO=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  const dt=new Date(year,month,day);document.getElementById('day-modal-title').textContent=WD[dt.getDay()]+' '+day+' '+MO[month]+' '+year;
+  const grid=document.getElementById('day-modal-grid');grid.innerHTML='';
+  COUPLE.forEach((c,i)=>{const div=document.createElement('div');div.className='emoji-btn'+(ei===i?' selected':'');div.innerHTML='<span class="emoji-big">'+c.e+'</span><span class="emoji-lbl">'+c.l+'</span>';div.onclick=()=>setDayCouple(i);grid.appendChild(div);});
+  document.getElementById('day-modal').classList.add('show');
+}
+function setDayCouple(i){
+  const{year,month,day}=S.modalDate;
+  const k=year+'-'+(month+1)+'-'+day;
+  // localStorage immédiat
+  const d=ls();if(!d.couple)d.couple={};d.couple[k]=i;lsSave(d);
+  closeDayModal();renderCalendar();renderCoupleStats();toast('Journée enregistrée ✓');
+  // Supabase en arrière-plan
+  const sbKey=year+'-'+pad(month+1)+'-'+pad(day);
+  SB.from('couple_journal').upsert({date_jour:sbKey,categorie:i},{onConflict:'date_jour'}).then(()=>{});
+  SB.from('timeline').insert({type:'couple',texte:'Journée couple : '+COUPLE[i].e+' '+COUPLE[i].l,meta:null}).then(()=>{});
+}
 async function clearDay(){if(!S.modalDate)return;const{year,month,day}=S.modalDate;const k=year+'-'+pad(month+1)+'-'+pad(day);await SB.from('couple_journal').delete().eq('date_jour',k);closeDayModal();await renderCalendar();await renderCoupleStats();toast('Effacé');}
 function closeDayModal(){document.getElementById('day-modal').classList.remove('show');}
 
