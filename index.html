@@ -185,10 +185,23 @@ input[type=range].int-slider{position:absolute;inset:0;width:100%;height:100%;op
 .toggle.on{background:var(--violet);border-color:var(--violet);}
 .toggle-thumb{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform 0.28s;}
 .toggle.on .toggle-thumb{transform:translateX(20px);}
-.hist-item{background:rgba(255,255,255,0.03);border-radius:var(--radius-sm);padding:12px;margin-bottom:7px;border:1px solid var(--border);position:relative;overflow:hidden;transition:transform 0.2s ease;}
-.hist-item.swiped{transform:translateX(-70px);}
-.hist-del-btn{position:absolute;right:0;top:0;bottom:0;width:64px;background:var(--rose);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;border-radius:0 var(--radius-sm) var(--radius-sm) 0;}
-.hist-del-btn:active{background:#c0392b;}
+.hist-item{background:rgba(255,255,255,0.03);border-radius:var(--radius-sm);padding:12px 40px 12px 12px;margin-bottom:7px;border:1px solid var(--border);position:relative;}
+.hist-date{font-size:10px;color:var(--text-muted);margin-bottom:5px;}
+.hist-text{font-size:13px;color:var(--text-secondary);line-height:1.45;}
+.hist-del-btn{position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:50%;background:rgba(239,87,104,0.15);border:1px solid rgba(239,87,104,0.25);display:flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer;color:var(--rose-light);transition:all 0.15s;}
+.hist-del-btn:active{background:var(--rose);color:#fff;}
+
+/* LIEN CONTEXTUEL */
+.lien-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px;}
+.lien-btn{padding:9px 8px;border-radius:var(--radius-sm);background:rgba(255,255,255,0.04);border:1.5px solid var(--border);color:var(--text-muted);font-size:11px;font-family:'Montserrat',sans-serif;cursor:pointer;text-align:center;transition:all 0.18s;}
+.lien-btn.active{background:rgba(192,132,252,0.15);border-color:var(--violet-bright);color:var(--violet-bright);font-weight:600;}
+.lien-btn:active{transform:scale(0.96);}
+
+/* BESOINS */
+.needs-grid{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px;}
+.need-chip{padding:7px 11px;border-radius:20px;background:rgba(255,255,255,0.04);border:1.5px solid var(--border);color:var(--text-muted);font-size:11px;font-family:'Montserrat',sans-serif;cursor:pointer;transition:all 0.18s;white-space:nowrap;}
+.need-chip.active{border-color:var(--gold);background:rgba(244,197,90,0.12);color:var(--gold);}
+.need-chip:active{transform:scale(0.94);}
 .ai-loading{display:inline-flex;gap:4px;align-items:center;}
 .ai-dot{width:5px;height:5px;border-radius:50%;background:var(--violet-bright);animation:aidot 1.2s infinite;}
 .ai-dot:nth-child(2){animation-delay:.2s;}.ai-dot:nth-child(3){animation-delay:.4s;}
@@ -337,6 +350,22 @@ canvas{display:block;}
       <textarea class="text-input" id="emo-feeling" rows="3" placeholder="Je ressens… (colère, tristesse, joie, angoisse…)"></textarea>
       <div style="margin-top:12px;"><div class="card-title">Contexte (optionnel)</div><textarea class="text-input" id="emo-context" rows="2" placeholder="Ce qui s'est passé…"></textarea></div>
       <div class="intensity-row"><span class="intensity-lbl">Intensité</span><div class="intensity-bar"><div class="intensity-fill" id="int-fill" style="width:50%"></div><input type="range" class="int-slider" min="0" max="100" value="50" step="1" oninput="setInt(this.value)"></div><span class="intensity-num" id="int-num">50</span></div>
+      <!-- LIEN CONTEXTUEL -->
+      <div style="margin-top:4px;margin-bottom:12px;">
+        <div class="card-title" style="margin-bottom:8px;">Mon ressenti est-il lié à ce contexte ?</div>
+        <div class="lien-grid" id="lien-grid">
+          <div class="lien-btn" onclick="setLien('oui')">✓ Oui, clairement</div>
+          <div class="lien-btn" onclick="setLien('partiel')">~ En partie seulement</div>
+          <div class="lien-btn" onclick="setLien('non')">✗ Pas vraiment</div>
+          <div class="lien-btn" onclick="setLien('sais-pas')">? Je ne sais pas</div>
+        </div>
+      </div>
+      <!-- BESOINS -->
+      <div style="margin-bottom:12px;">
+        <div class="card-title" style="margin-bottom:4px;">Ce dont j'ai besoin en ce moment</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">Touche ce qui résonne pour toi</div>
+        <div class="needs-grid" id="needs-grid"></div>
+      </div>
       <button class="action-btn btn-primary" id="emo-btn" onclick="analyzeEmo()">Analyser avec l'IA ✦</button>
       <div class="ai-block blue" id="anchor-box"><div class="ai-tag blue">⚓ PHRASE D'ANCRAGE</div><div class="ai-text" id="anchor-text"></div></div>
       <div class="ai-block violet" id="emo-ai-box"><div class="ai-tag violet">✦ RÉFLEXION BIENVEILLANTE</div><div class="ai-text" id="emo-ai-text"></div></div>
@@ -517,6 +546,41 @@ const MOOD_E=[["😫","😞","😕","😐","🙂","😊","😄","🤩","🥰","�
 const TYPE_COL={mood:'#9B78D4',emotion:'#EF5768',couple:'#FF8FA3',gratitude:'#F4C55A',lecon:'#4A89FF',pensee:'#5DCAA5'};
 const TYPE_LBL={mood:'Humeurs',emotion:'Émotion',couple:'Couple',gratitude:'Gratitude',lecon:'Leçon',pensee:'Pensées'};
 
+const NEEDS=[
+  {id:'securite',l:'🛡️ Sécurité'},{id:'rassuree',l:'🤗 Être rassurée'},
+  {id:'stable',l:'⚓ Stabilité'},{id:'ancree',l:'🌿 Ancrage'},
+  {id:'soutenue',l:'🤝 Soutien'},{id:'protegee',l:'🫂 Protection'},
+  {id:'confiante',l:'✨ Confiance'},{id:'solide',l:'💪 Me sentir solide'},
+  {id:'comprise',l:'💜 Être comprise'},{id:'reconnue',l:'🌟 Reconnaissance'},
+  {id:'acceptee',l:'🙏 Acceptation'},{id:'validee',l:'💫 Validation'},
+  {id:'calme',l:'🌊 Calme'},{id:'paix',l:'🕊️ Paix intérieure'},
+  {id:'connexion',l:'❤️ Connexion'},{id:'tendresse',l:'🥰 Tendresse'},
+  {id:'espace',l:'🌸 Espace & liberté'},{id:'clarte',l:'💡 Clarté'},
+  {id:'repos',l:'😴 Repos'},{id:'legerete',l:'☀️ Légèreté'},
+];
+
+// Emotion state
+let S_emoLien=null;
+const S_emoNeeds=new Set();
+
+function setLien(val){
+  S_emoLien=val;
+  document.querySelectorAll('.lien-btn').forEach((b,i)=>{
+    b.classList[['oui','partiel','non','sais-pas'][i]===val?'add':'remove']('active');
+  });
+}
+
+function renderNeeds(){
+  const g=document.getElementById('needs-grid');
+  if(!g)return;
+  g.innerHTML=NEEDS.map(n=>`<div class="need-chip${S_emoNeeds.has(n.id)?' active':''}" onclick="toggleNeed('${n.id}')">${n.l}</div>`).join('');
+}
+
+function toggleNeed(id){
+  if(S_emoNeeds.has(id))S_emoNeeds.delete(id);else S_emoNeeds.add(id);
+  renderNeeds();
+}
+
 // ── NAVIGATION ────────────────────────────────────────────
 function goTo(id){const cur=document.querySelector('.screen.active');if(cur){S.prevScreen=cur.id;cur.classList.remove('active');cur.classList.add('prev');setTimeout(()=>cur.classList.remove('prev'),500);}const n=document.getElementById(id);n.classList.add('active');S.curScreen=id;onEnter(id);}
 function goBack(){goTo(S.prevScreen===S.curScreen?'home-screen':S.prevScreen);}
@@ -526,7 +590,7 @@ function onEnter(id){
   if(id==='journal-screen'){renderCalendar();renderCoupleStats();renderHealthUI();setTimeout(renderHealthCharts,80);}
   if(id==='reflexion-screen'){renderRefCit();renderMyCits();}
   if(id==='timeline-screen'){renderTLPeriodUI();renderGStats();renderTimeline();}
-  if(id==='emotions-screen'){renderEmoHistory();}
+  if(id==='emotions-screen'){S_emoLien=null;S_emoNeeds.clear();renderEmoHistory();setTimeout(renderNeeds,50);}
   if(id==='profile-screen'){loadAiUrl();}
 }
 
@@ -615,14 +679,58 @@ function saveCouple(){
 
 // ── ÉMOTIONS ──────────────────────────────────────────────
 function setInt(v){document.getElementById('int-fill').style.width=v+'%';document.getElementById('int-num').textContent=v;}
-async function analyzeEmo(){const feeling=document.getElementById('emo-feeling').value.trim();if(!feeling){toast('Décris ce que tu ressens');return;}const context=document.getElementById('emo-context').value.trim();const intensity=document.getElementById('int-num').textContent;const btn=document.getElementById('emo-btn');btn.innerHTML='<div class="ai-loading"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div>';btn.disabled=true;
-const anchor=ANCHORS[Math.floor(Math.random()*ANCHORS.length)];document.getElementById('anchor-text').textContent=anchor;document.getElementById('anchor-box').style.display='block';
-// Sauvegarde immédiate
-const{data:inserted}=await SB.from('emotions').insert({ressenti:feeling,intensite:+intensity,ancrage:anchor,reponse_ia:''}).select().single();
-await addTL('emotion',feeling+' (intensité : '+intensity+')');renderEmoHistory();
-// Tentative IA
-try{const data=await callClaude({model:'claude-haiku-4-5-20251001',max_tokens:280,messages:[{role:'user',content:`Tu es une thérapeute bienveillante. Une femme hypersensible de 43 ans exprime : "${feeling}"${context?' Contexte : "'+context+'"':''} Intensité : ${intensity}/100. Réponds en 3-4 phrases douces, sans conseils directifs. Valide, comprends, accompagne. En français, tutoie-la.`}]});const txt=data.content?.[0]?.text||'';if(txt){document.getElementById('emo-ai-text').textContent=txt;document.getElementById('emo-ai-box').style.display='block';if(inserted)await SB.from('emotions').update({reponse_ia:txt}).eq('id',inserted.id);}}catch(e){const msg=e&&e.message?e.message:String(e);console.error('IA:',msg);document.getElementById('emo-ai-text').textContent=msg.includes('no-endpoint')?"Configure l'URL IA dans ton Profil ✦":msg.includes('http-')?'Erreur connexion IA ('+msg+')':'Ce que tu ressens est valide et important. Prends le temps de respirer.';document.getElementById('emo-ai-box').style.display='block';}
-btn.innerHTML='Analyser avec l\'IA ✦';btn.disabled=false;toast('Émotion enregistrée ✓');}
+async function analyzeEmo(){
+  const feeling=document.getElementById('emo-feeling').value.trim();
+  if(!feeling){toast('Décris ce que tu ressens');return;}
+  const context=document.getElementById('emo-context').value.trim();
+  const intensity=document.getElementById('int-num').textContent;
+  const btn=document.getElementById('emo-btn');
+  btn.innerHTML='<div class="ai-loading"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div>';btn.disabled=true;
+  const anchor=ANCHORS[Math.floor(Math.random()*ANCHORS.length)];
+  document.getElementById('anchor-text').textContent=anchor;document.getElementById('anchor-box').style.display='block';
+  // Construire le contexte enrichi
+  const lienTexte=S_emoLien?{oui:'Oui, clairement lié au contexte',partiel:'Partiellement lié au contexte',non:'Pas vraiment lié au contexte',sasir_pas:'Elle ne sait pas si c\'est lié'}[S_emoLien]:'';
+  const needsSelected=[...S_emoNeeds].map(id=>NEEDS.find(n=>n.id===id)?.l).filter(Boolean);
+  const needsTexte=needsSelected.length?'Besoins identifiés : '+needsSelected.join(', '):'';
+  // Sauvegarde immédiate localStorage
+  const d=ls();if(!d.emotions)d.emotions=[];
+  d.emotions.unshift({date:new Date().toLocaleDateString('fr-FR'),time:new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),feeling,intensity,lien:S_emoLien,needs:[...S_emoNeeds],anchor,ai:''});
+  lsSave(d);
+  // Supabase en arrière-plan
+  const{data:inserted}=await SB.from('emotions').insert({ressenti:feeling,intensite:+intensity,ancrage:anchor,reponse_ia:''}).select().single();
+  addTL('emotion',feeling+' (intensité : '+intensity+')');
+  renderEmoHistory();
+  // IA avec contexte enrichi
+  const prompt=`Tu es une thérapeute bienveillante spécialisée en hypersensibilité. Une femme de 43 ans exprime :
+
+Émotion : "${feeling}"
+${context?'Contexte : "'+context+'"':''}
+Intensité : ${intensity}/100
+${lienTexte?'Lien avec le contexte : '+lienTexte:''}
+${needsTexte?needsTexte:''}
+
+Guide-la en 3-4 phrases douces et perspicaces. Si des besoins sont identifiés, valide-les et aide-la à comprendre ce qu'ils révèlent. Si le lien avec le contexte est flou, aide-la à explorer ça. Pas de conseils non demandés. En français, tutoie-la.`;
+  try{
+    const data=await callClaude({model:'claude-haiku-4-5-20251001',max_tokens:350,messages:[{role:'user',content:prompt}]});
+    const txt=data.content?.[0]?.text||'';
+    if(txt){
+      document.getElementById('emo-ai-text').textContent=txt;
+      document.getElementById('emo-ai-box').style.display='block';
+      if(inserted)SB.from('emotions').update({reponse_ia:txt}).eq('id',inserted.id).then(()=>{});
+      if(d.emotions[0])d.emotions[0].ai=txt;lsSave(d);
+    }
+  }catch(e){
+    const msg=e&&e.message?e.message:String(e);
+    console.error('IA:',msg);
+    document.getElementById('emo-ai-text').textContent=msg.includes('no-endpoint')?"Configure l'URL IA dans ton Profil ✦":msg.includes('http-')?'Erreur connexion IA':'Ce que tu ressens est valide. Prends le temps de respirer.';
+    document.getElementById('emo-ai-box').style.display='block';
+  }
+  btn.innerHTML="Analyser avec l'IA ✦";btn.disabled=false;toast('Émotion enregistrée ✓');
+  // Reset
+  S_emoLien=null;S_emoNeeds.clear();
+  document.querySelectorAll('.lien-btn').forEach(b=>b.classList.remove('active'));
+  renderNeeds();
+}
 async function renderEmoHistory(){
   const d=ls();const lsEmo=d.emotions||[];
   // Merge with Supabase data
