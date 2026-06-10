@@ -379,6 +379,7 @@ canvas{display:block;}
           <div class="card-title" style="margin-bottom:4px;" id="needs-title">Ce dont tu as besoin</div>
           <div style="font-size:10px;color:var(--text-muted);margin-bottom:9px;">Coche ce qui résonne, même instinctivement</div>
           <div class="needs-grid" id="needs-grid"></div>
+          <button class="action-btn btn-secondary" style="font-size:12px;padding:11px;margin-top:10px;" onclick="saveEmoNeeds()">💾 Sauvegarder mes besoins</button>
         </div>
       </div>
     </div>
@@ -521,17 +522,26 @@ function moodColor(v){return 'hsl('+Math.round(v*1.2)+',62%,53%)';}
 async function callClaude(body){
   const url=(ls().aiUrl||'').trim();
   if(!url)throw new Error('no-endpoint');
-  const r=await fetch(url,{
-    method:'POST',
-    headers:{
-      'Content-Type':'application/json',
-      'Authorization':'Bearer '+SB_KEY,
-      'apikey':SB_KEY
-    },
-    body:JSON.stringify(body)
-  });
-  if(!r.ok)throw new Error('http-'+r.status);
-  return await r.json();
+  try{
+    const r=await fetch(url,{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':'Bearer '+SB_KEY,
+        'apikey':SB_KEY
+      },
+      body:JSON.stringify(body)
+    });
+    if(!r.ok){
+      let detail='';
+      try{const errBody=await r.json();detail=errBody.error?.message||errBody.message||'';}catch(e){}
+      throw new Error('http-'+r.status+(detail?' : '+detail:''));
+    }
+    return await r.json();
+  }catch(e){
+    if(e.message&&(e.message.startsWith('http-')||e.message==='no-endpoint'))throw e;
+    throw new Error('reseau : '+(e.message||'vérifier connexion'));
+  }
 }
 
 // ── STATE ─────────────────────────────────────────────────
@@ -800,25 +810,42 @@ function resetEmoForm(){
   btn.onclick=analyzeEmo;
   btn.className='action-btn btn-primary';
 }
+function saveEmoNeeds(){
+  const d=ls();
+  if(d.emotions&&d.emotions.length>0){
+    d.emotions[0].emoType=S_emoType;
+    d.emotions[0].lien=S_emoLien;
+    d.emotions[0].needs=[...S_emoNeeds];
+    lsSave(d);
+  }
+  renderEmoHistory();
+  toast('Besoins enregistrés ✓');
+}
+
 async function renderEmoHistory(){
   const d=ls();const lsEmo=d.emotions||[];
-  // Merge with Supabase data
   let emotions=lsEmo;
-  try{const{data}=await SB.from('emotions').select('*').order('created_at',{ascending:false}).limit(20);if(data&&data.length)emotions=data;}catch(e){}
+  try{const{data}=await SB.from('emotions').select('*').order('created_at',{ascending:false}).limit(20);if(data&&data.length){// Merge Supabase with localStorage needs data
+    emotions=data.map((e,i)=>{const ls_e=lsEmo[i]||{};return{...e,needs:ls_e.needs||[],emoType:ls_e.emoType||null,lien:ls_e.lien||null};});}}catch(e){}
   const el=document.getElementById('emo-history');
   if(!emotions.length){el.innerHTML='<div style="text-align:center;padding:16px;color:var(--text-muted);font-size:12px;">Tes émotions apparaîtront ici</div>';return;}
+  const lienLabels={oui:'✓ lié au contexte',partiel:'~ en partie lié',non:'✗ non lié','sais-pas':'? lien incertain'};
   el.innerHTML=emotions.slice(0,10).map((e,i)=>{
     const dt=e.created_at?new Date(e.created_at):null;
     const dateStr=e.date||(dt?dt.toLocaleDateString('fr-FR')+' à '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):'');
     const id=e.id||i;
-    return '<div class="hist-item" id="emo-h-'+id+'" data-id="'+id+'" data-idx="'+i+'">'+
+    const emoTypeLbl=e.emoType?EMO_TYPES.find(t=>t.id===e.emoType)?.l||'':'';
+    const lienLbl=e.lien?lienLabels[e.lien]||'':'';
+    const needsArr=e.needs||[];
+    const needsHtml=needsArr.length?'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">'+needsArr.map(nid=>{const n=NEEDS.find(x=>x.id===nid);return n?'<span style="font-size:10px;background:rgba(244,197,90,0.1);border:1px solid rgba(244,197,90,0.25);border-radius:10px;padding:2px 8px;color:var(--gold);">'+n.l+'</span>':''}).join('')+'</div>':'';
+    const metaHtml=(emoTypeLbl||lienLbl)?'<div style="font-size:10px;color:var(--violet-bright);margin-top:4px;">'+(emoTypeLbl?emoTypeLbl+' ':'')+( lienLbl?'· '+lienLbl:'')+'</div>':'';
+    return '<div class="hist-item" id="emo-h-'+id+'">'+
       '<div class="hist-date">'+dateStr+'</div>'+
       '<div class="hist-text">'+(e.ressenti||e.feeling||'')+'</div>'+
-      '<div class="hist-del-btn" onclick="delEmo(\''+id+'\','+i+')">🗑️</div>'+
+      metaHtml+needsHtml+
+      '<div class="hist-del-btn" onclick="delEmo(\''+id+'\','+i+')">✕</div>'+
     '</div>';
   }).join('');
-  // Attach swipe listeners
-  el.querySelectorAll('.hist-item').forEach(item=>attachSwipe(item));
 }
 
 function attachSwipe(el){
@@ -940,7 +967,33 @@ function renderTLPeriodUI(){const nav=document.getElementById('tl-period-nav');i
 function getTLRange(){const now=new Date();if(S.tlPeriod==='week'){const st=startOfWeek(now,S.tlOffset);const en=new Date(st);en.setDate(st.getDate()+7);return{start:st.toISOString(),end:en.toISOString()};}if(S.tlPeriod==='month'){const dt=new Date(now.getFullYear(),now.getMonth()+S.tlOffset,1);const end=new Date(dt.getFullYear(),dt.getMonth()+1,1);return{start:dt.toISOString(),end:end.toISOString()};}const y=now.getFullYear()+S.tlOffset;return{start:y+'-01-01T00:00:00Z',end:(y+1)+'-01-01T00:00:00Z'};}
 async function renderGStats(){let q=SB.from('timeline').select('type');if(S.tlPeriod!=='all'){const{start,end}=getTLRange();q=q.gte('created_at',start).lt('created_at',end);}const{data}=await q;const counts={emotion:0,gratitude:0,lecon:0,pensee:0};(data||[]).forEach(r=>{if(counts.hasOwnProperty(r.type))counts[r.type]++;});const types=[{k:'emotion',l:'💜 Émotions',c:'var(--rose-light)'},{k:'gratitude',l:'🙏 Gratitudes',c:'var(--gold)'},{k:'lecon',l:'📖 Leçons',c:'var(--blue-light)'},{k:'pensee',l:'🌊 Pensées',c:'var(--green)'}];document.getElementById('gstats').innerHTML=types.map(t=>'<div class="gstat-box'+(S.tlCats.has(t.k)?' active':'')+'" onclick="toggleTLCat(\''+t.k+'\')"><div class="gstat-num" style="color:'+t.c+'">'+counts[t.k]+'</div><div class="gstat-lbl">'+t.l+'</div></div>').join('');}
 function toggleTLCat(k){if(S.tlCats.has(k))S.tlCats.delete(k);else S.tlCats.add(k);renderGStats();renderTimeline();}
-async function renderTimeline(){let q=SB.from('timeline').select('*').order('created_at',{ascending:false});if(S.tlPeriod!=='all'){const{start,end}=getTLRange();q=q.gte('created_at',start).lt('created_at',end);}if(S.tlCats.size>0)q=q.in('type',[...S.tlCats]);const{data:tl}=await q.limit(60);const el=document.getElementById('tl-list');if(!tl||!tl.length){el.innerHTML='<div style="text-align:center;padding:28px;color:var(--text-muted);font-size:12px;">Aucune entrée sur cette sélection ✦</div>';return;}el.innerHTML=tl.map(e=>{let body;if(e.type==='mood'&&e.meta&&e.meta.m){const names=['Général','Couple','Énergie'];body='<div class="mood-circles">'+e.meta.m.map((v,i)=>'<div class="mc-item"><div class="mc-dot" style="background:'+moodColor(v)+'"></div><div class="mc-lbl">'+names[i]+'</div></div>').join('')+'</div>';}else{body='<div class="tl-text">'+(e.texte||'')+'</div>';}const dt=new Date(e.created_at);const dateStr=dt.toLocaleDateString('fr-FR')+' '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});return'<div class="tl-item"><div class="tl-dot" style="background:'+(TYPE_COL[e.type]||'#9B78D4')+'"></div><div class="tl-body"><div class="tl-type">'+(TYPE_LBL[e.type]||e.type)+'</div>'+body+'<div class="tl-time">'+dateStr+'</div></div></div>';}).join('');}
+async function renderTimeline(){
+  let q=SB.from('timeline').select('*').order('created_at',{ascending:false});
+  if(S.tlPeriod!=='all'){const{start,end}=getTLRange();q=q.gte('created_at',start).lt('created_at',end);}
+  if(S.tlCats.size>0)q=q.in('type',[...S.tlCats]);
+  const{data:tl}=await q.limit(60);
+  const el=document.getElementById('tl-list');
+  if(!tl||!tl.length){el.innerHTML='<div style="text-align:center;padding:28px;color:var(--text-muted);font-size:12px;">Aucune entrée sur cette sélection ✦</div>';return;}
+  el.innerHTML=tl.map(e=>{
+    let body;
+    if(e.type==='mood'&&e.meta&&e.meta.m){
+      const names=['Général','Couple','Énergie'];
+      body='<div class="mood-circles">'+e.meta.m.map((v,i)=>'<div class="mc-item"><div class="mc-dot" style="background:'+moodColor(v)+'"></div><div class="mc-lbl">'+names[i]+'</div></div>').join('')+'</div>';
+    }else{body='<div class="tl-text">'+(e.texte||'')+'</div>';}
+    const dt=new Date(e.created_at);
+    const dateStr=dt.toLocaleDateString('fr-FR')+' '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    return '<div class="tl-item" id="tl-'+e.id+'" style="position:relative;padding-right:28px;">'+
+      '<div class="tl-dot" style="background:'+(TYPE_COL[e.type]||'#9B78D4')+'"></div>'+
+      '<div class="tl-body"><div class="tl-type">'+(TYPE_LBL[e.type]||e.type)+'</div>'+body+'<div class="tl-time">'+dateStr+'</div></div>'+
+      '<div onclick="delTLItem('+e.id+')" style="position:absolute;top:4px;right:0;width:20px;height:20px;border-radius:50%;background:rgba(239,87,104,0.15);border:1px solid rgba(239,87,104,0.25);display:flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer;color:var(--rose-light);">✕</div>'+
+    '</div>';
+  }).join('');
+}
+function delTLItem(id){
+  const el=document.getElementById('tl-'+id);
+  if(el){el.style.transition='all 0.3s';el.style.opacity='0';el.style.maxHeight='0';el.style.overflow='hidden';setTimeout(()=>{el.remove();renderGStats();},300);}
+  SB.from('timeline').delete().eq('id',id).then(()=>{});
+}
 
 // ── INIT ──────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded',async()=>{updateClock();renderCit();await loadMyCits();});
