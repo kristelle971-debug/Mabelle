@@ -766,6 +766,18 @@ async function analyzeEmo(){
   addTL('emotion',feeling+' (intensité : '+intensity+')');
   renderEmoHistory();
   // IA
+  const prompt=`Tu es une thérapeute bienveillante spécialisée en hypersensibilité. Une femme de 43 ans partage :
+
+Émotion ressentie : "${feeling}"
+${context?'Contexte : "'+context+'"':'Pas de contexte précisé.'}
+Intensité : ${intensity}/100
+
+RÈGLES ABSOLUES :
+- Ne pose AUCUNE question. Uniquement des affirmations et des éclairages.
+- Tu offres un miroir bienveillant, pas un échange.
+- 3 à 4 phrases maximum.
+- Aide à comprendre l'émotion, pas à la résoudre.
+- En français, tutoie-la, sois douce et précise.`;
   try{
     const data=await callClaude({model:'claude-haiku-4-5-20251001',max_tokens:350,messages:[{role:'user',content:prompt}]});
     const txt=data.content?.[0]?.text||'';
