@@ -202,6 +202,11 @@ input[type=range].int-slider{position:absolute;inset:0;width:100%;height:100%;op
 .need-chip{padding:7px 11px;border-radius:20px;background:rgba(255,255,255,0.04);border:1.5px solid var(--border);color:var(--text-muted);font-size:11px;font-family:'Montserrat',sans-serif;cursor:pointer;transition:all 0.18s;white-space:nowrap;}
 .need-chip.active{border-color:var(--gold);background:rgba(244,197,90,0.12);color:var(--gold);}
 .need-chip:active{transform:scale(0.94);}
+/* EXEMPLES PAR BESOIN */
+.need-examples{margin-top:12px;padding-top:10px;border-top:1px solid var(--border-light);}
+.need-example{font-size:12px;color:var(--text-muted);padding:5px 0;line-height:1.55;border-bottom:1px solid rgba(255,255,255,0.04);}
+.need-example:last-child{border-bottom:none;}
+.need-example strong{color:var(--violet-bright);font-weight:600;}
 .ai-loading{display:inline-flex;gap:4px;align-items:center;}
 .ai-dot{width:5px;height:5px;border-radius:50%;background:var(--violet-bright);animation:aidot 1.2s infinite;}
 .ai-dot:nth-child(2){animation-delay:.2s;}.ai-dot:nth-child(3){animation-delay:.4s;}
@@ -379,6 +384,7 @@ canvas{display:block;}
           <div class="card-title" style="margin-bottom:4px;" id="needs-title">Ce dont tu as besoin</div>
           <div style="font-size:10px;color:var(--text-muted);margin-bottom:9px;">Coche ce qui résonne, même instinctivement</div>
           <div class="needs-grid" id="needs-grid"></div>
+          <div class="need-examples" id="need-examples" style="display:none;"></div>
           <button class="action-btn btn-secondary" style="font-size:12px;padding:11px;margin-top:10px;" onclick="saveEmoNeeds()">💾 Sauvegarder mes besoins</button>
         </div>
       </div>
@@ -569,43 +575,80 @@ const TYPE_COL={mood:'#9B78D4',emotion:'#EF5768',couple:'#FF8FA3',gratitude:'#F4
 const TYPE_LBL={mood:'Humeurs',emotion:'Émotion',couple:'Couple',gratitude:'Gratitude',lecon:'Leçon',pensee:'Pensées'};
 
 const NEEDS=[
-  {id:'securite',l:'🛡️ Sécurité'},{id:'rassuree',l:'🤗 Être rassurée'},
-  {id:'stable',l:'⚓ Stabilité'},{id:'ancree',l:'🌿 Ancrage'},
-  {id:'soutenue',l:'🤝 Soutien'},{id:'protegee',l:'🫂 Protection'},
-  {id:'confiante',l:'✨ Confiance'},{id:'solide',l:'💪 Me sentir solide'},
-  {id:'comprise',l:'💜 Être comprise'},{id:'reconnue',l:'🌟 Reconnaissance'},
-  {id:'acceptee',l:'🙏 Acceptation'},{id:'validee',l:'💫 Validation'},
+  {id:'securite',l:'🛡️ Sécurité'},{id:'rassuree',l:'🤗 Rassurée'},
+  {id:'stable',l:'⚓ Stabilité'},{id:'ancree',l:'🌿 Ancrée'},
+  {id:'soutenue',l:'🤝 Soutenue'},{id:'protegee',l:'🫂 Protégée'},
+  {id:'confiante',l:'✨ Confiante'},{id:'solide',l:'💪 Solide'},
+  {id:'comprise',l:'💜 Comprise'},{id:'reconnue',l:'🌟 Reconnue'},
+  {id:'acceptee',l:'🙏 Acceptée'},{id:'validee',l:'💫 Validée'},
   {id:'calme',l:'🌊 Calme'},{id:'paix',l:'🕊️ Paix intérieure'},
   {id:'connexion',l:'❤️ Connexion'},{id:'tendresse',l:'🥰 Tendresse'},
-  {id:'espace',l:'🌸 Espace & liberté'},{id:'clarte',l:'💡 Clarté'},
+  {id:'espace',l:'🌸 Espace'},{id:'clarte',l:'💡 Clarté'},
   {id:'repos',l:'😴 Repos'},{id:'legerete',l:'☀️ Légèreté'},
-  {id:'entendue',l:'👂 Être entendue'},{id:'presence',l:'🫶 Présence'},
+  {id:'entendue',l:'👂 Entendue'},{id:'presence',l:'🫶 Présence'},
+  {id:'choisie',l:'💫 Choisie'},{id:'alaise',l:'😌 À l\'aise'},
+  {id:'sereine',l:'🧘 Sereine'},{id:'libre',l:'🕊️ Libre'},
+  {id:'respectee',l:'🙌 Respectée'},{id:'visible',l:'👁️ Visible'},
+  {id:'reperes',l:'🗺️ Des repères'},{id:'alignee',l:'🎯 Alignée'},
 ];
 
-// Mapping émotion → besoins suggérés
-const EMO_NEEDS_MAP={
-  'fragile':    ['securite','rassuree','stable','solide','soutenue','confiante','ancree','protegee'],
-  'blessée':    ['securite','protegee','tendresse','comprise','rassuree','soutenue'],
-  'angoissée':  ['securite','calme','ancree','stable','clarte','rassuree'],
-  'triste':     ['connexion','soutenue','tendresse','comprise','presence','entendue'],
-  'seule':      ['connexion','presence','soutenue','tendresse','entendue','acceptee'],
-  'en colère':  ['entendue','reconnue','clarte','espace','respect','validee'],
-  'incomprise': ['comprise','validee','entendue','reconnue','connexion'],
-  'débordée':   ['espace','repos','calme','soutenue','legerete','stable'],
-  'déçue':      ['entendue','connexion','comprise','validee','rassuree'],
-  'perdue':     ['clarte','ancree','stable','guidee','soutenue','securite'],
-  'honteuse':   ['acceptee','rassuree','tendresse','validee','soutenue'],
-  'tendue':     ['calme','repos','espace','securite','legerete','ancree'],
+const EMO_DATA={
+  'fragile':{l:'💔 Fragile',
+    needs:['securite','rassuree','stable','solide','soutenue','confiante','ancree','protegee'],
+    exemples:['Si tu te sens fragile <strong>parce que tu as peur d\'être blessée</strong> → besoin de <strong>sécurité</strong>','Si tu te sens fragile <strong>parce que tu doutes</strong> → besoin d\'être <strong>rassurée</strong>','Si tu te sens fragile <strong>parce que tout te touche beaucoup</strong> → besoin d\'être <strong>ancrée</strong> ou <strong>stable</strong>','Si tu te sens fragile <strong>parce que tu te sens seule face à quelque chose</strong> → besoin d\'être <strong>soutenue</strong>']},
+  'blessée':{l:'🤕 Blessée',
+    needs:['securite','protegee','tendresse','comprise','rassuree','soutenue','paix'],
+    exemples:['Si tu te sens blessée <strong>par des mots ou un comportement</strong> → besoin d\'être <strong>respectée</strong> et <strong>comprise</strong>','Si tu te sens blessée <strong>parce qu\'on t\'a ignorée</strong> → besoin d\'être <strong>reconnue</strong> et <strong>visible</strong>','Si tu te sens blessée <strong>par une déception</strong> → besoin de <strong>sécurité émotionnelle</strong>','Si tu te sens blessée <strong>et que tu te renfermes</strong> → besoin de <strong>tendresse</strong> et d\'<strong>espace</strong>']},
+  'angoissée':{l:'😰 Angoissée',
+    needs:['securite','calme','ancree','stable','clarte','rassuree','reperes'],
+    exemples:['Si l\'angoisse vient <strong>de l\'inconnu</strong> → besoin de <strong>visibilité</strong> et de <strong>repères</strong>','Si l\'angoisse vient <strong>d\'un scénario catastrophe</strong> → besoin d\'être <strong>rassurée</strong> et <strong>ancrée</strong>','Si l\'angoisse est <strong>physique, dans le corps</strong> → besoin de <strong>calme</strong> et de <strong>sécurité</strong>','Si l\'angoisse vient <strong>d\'une relation</strong> → besoin de <strong>stabilité</strong> et de <strong>clarté</strong>']},
+  'triste':{l:'😢 Triste',
+    needs:['connexion','soutenue','tendresse','comprise','presence','entendue','paix'],
+    exemples:['Si tu es triste <strong>d\'une perte ou d\'un manque</strong> → besoin de <strong>connexion</strong> et de <strong>présence</strong>','Si tu es triste <strong>parce que tu te sens seule</strong> → besoin de <strong>tendresse</strong> et d\'être <strong>entendue</strong>','Si tu es triste <strong>sans raison précise</strong> → besoin de <strong>douceur envers toi-même</strong> et de <strong>paix</strong>','Si tu es triste <strong>d\'une déception relationnelle</strong> → besoin d\'être <strong>comprise</strong> et <strong>choisie</strong>']},
+  'seule':{l:'🫂 Seule',
+    needs:['connexion','presence','soutenue','tendresse','entendue','acceptee','choisie'],
+    exemples:['Si tu te sens seule <strong>même entourée</strong> → besoin d\'être vraiment <strong>comprise</strong> et <strong>entendue</strong>','Si tu te sens seule <strong>dans ton couple</strong> → besoin de <strong>connexion</strong> et d\'être <strong>choisie</strong>','Si tu te sens seule <strong>face à tes responsabilités</strong> → besoin d\'être <strong>soutenue</strong>','Si tu te sens seule <strong>dans ta sensibilité</strong> → besoin d\'être <strong>acceptée</strong> telle que tu es']},
+  'en colère':{l:'😤 En colère',
+    needs:['entendue','reconnue','clarte','espace','respectee','validee'],
+    exemples:['Si tu es en colère <strong>parce qu\'on t\'a ignorée</strong> → besoin d\'être <strong>entendue</strong> et <strong>reconnue</strong>','Si tu es en colère <strong>face à une injustice</strong> → besoin de <strong>respect</strong> et de <strong>clarté</strong>','Si tu es en colère <strong>contre toi-même</strong> → besoin d\'être <strong>validée</strong> dans tes limites','Si tu es en colère <strong>parce que tu t\'es effacée</strong> → besoin d\'<strong>espace</strong> et de <strong>liberté d\'être toi</strong>']},
+  'incomprise':{l:'😶 Incomprise',
+    needs:['comprise','validee','entendue','reconnue','connexion','acceptee'],
+    exemples:['Si tu te sens incomprise <strong>dans tes émotions</strong> → besoin que tes ressentis soient <strong>validés</strong>','Si tu te sens incomprise <strong>dans ta façon de penser</strong> → besoin d\'être <strong>entendue</strong> vraiment','Si tu te sens incomprise <strong>dans ta sensibilité</strong> → besoin d\'être <strong>acceptée</strong> sans avoir à te justifier','Si tu te sens incomprise <strong>en couple</strong> → besoin de <strong>connexion profonde</strong>']},
+  'débordée':{l:'😵 Débordée',
+    needs:['espace','repos','calme','soutenue','legerete','stable'],
+    exemples:['Si tu es débordée <strong>par les tâches</strong> → besoin d\'<strong>aide concrète</strong> et d\'allégement','Si tu es débordée <strong>émotionnellement</strong> → besoin de <strong>calme</strong> et d\'<strong>espace</strong>','Si tu es débordée <strong>parce que tu tout portes</strong> → besoin d\'être <strong>soutenue</strong>','Si tu es débordée <strong>parce que tout va vite</strong> → besoin de <strong>repos</strong> et de <strong>légèreté</strong>']},
+  'déçue':{l:'😔 Déçue',
+    needs:['entendue','connexion','comprise','validee','rassuree','stable'],
+    exemples:['Si tu es déçue <strong>par quelqu\'un</strong> → besoin de <strong>fiabilité</strong> et d\'être <strong>choisie</strong>','Si tu es déçue <strong>par une situation</strong> → besoin de <strong>stabilité</strong> et de <strong>clarté</strong>','Si tu es déçue <strong>par toi-même</strong> → besoin d\'être <strong>rassurée</strong> et <strong>validée</strong>','Si tu es déçue <strong>après avoir espéré</strong> → besoin d\'être <strong>comprise</strong> dans ta vulnérabilité']},
+  'perdue':{l:'😕 Perdue',
+    needs:['clarte','ancree','stable','reperes','soutenue','securite','alignee'],
+    exemples:['Si tu te sens perdue <strong>dans une décision</strong> → besoin de <strong>clarté</strong> et de <strong>repères</strong>','Si tu te sens perdue <strong>dans ta vie</strong> → besoin de <strong>sens</strong> et d\'<strong>alignement</strong>','Si tu te sens perdue <strong>dans une relation</strong> → besoin de <strong>stabilité</strong> et de <strong>sécurité</strong>','Si tu te sens perdue <strong>dans tes émotions</strong> → besoin d\'être <strong>ancrée</strong> et <strong>guidée</strong>']},
+  'inconfortable':{l:'😣 Inconfortable',
+    needs:['alaise','sereine','confiante','securite','respectee','acceptee','libre','stable'],
+    exemples:['Dans <strong>une discussion difficile</strong> → besoin de <strong>clarté</strong>, de <strong>respect</strong> ou de sécurité émotionnelle','Dans <strong>un groupe</strong> → besoin de te sentir <strong>acceptée</strong> ou à ta place','Face à <strong>une situation incertaine</strong> → besoin de <strong>visibilité</strong>, de repères ou de contrôle','Avec <strong>toi-même</strong> → besoin de <strong>confiance</strong> ou d\'alignement avec tes valeurs']},
+  'incertaine':{l:'🌀 Incertaine',
+    needs:['clarte','stable','confiante','reperes','securite','rassuree','alignee'],
+    exemples:['"<strong>Je ne sais pas ce qui va se passer</strong>" → besoin de <strong>visibilité</strong>','"<strong>Je ne sais pas quoi choisir</strong>" → besoin de <strong>clarté</strong> ou de confiance en ton jugement','"<strong>Je ne sais pas ce que l\'autre ressent</strong>" → besoin de <strong>confirmation</strong> ou de réassurance','"<strong>Je ne sais pas si je peux compter sur ça</strong>" → besoin de <strong>stabilité</strong>']},
+  'honteuse':{l:'😳 Honteuse',
+    needs:['acceptee','rassuree','tendresse','validee','soutenue','libre'],
+    exemples:['Si tu as honte <strong>de ce que tu as fait</strong> → besoin de <strong>pardon</strong> et d\'<strong>acceptation</strong>','Si tu as honte <strong>de ce que tu es</strong> → besoin d\'être <strong>aimée</strong> inconditionnellement','Si tu as honte <strong>de tes émotions</strong> → besoin que ta sensibilité soit <strong>validée</strong>','Si tu as honte <strong>du regard des autres</strong> → besoin de te sentir <strong>libre d\'être toi</strong>']},
+  'tendue':{l:'😬 Tendue',
+    needs:['calme','repos','espace','securite','legerete','ancree'],
+    exemples:['Si tu es tendue <strong>avant un événement</strong> → besoin de <strong>préparation</strong> et de <strong>sécurité</strong>','Si tu es tendue <strong>dans une relation</strong> → besoin de <strong>clarté</strong> et de <strong>décompression</strong>','Si tu es tendue <strong>physiquement</strong> → besoin de <strong>repos</strong> et de <strong>calme</strong>','Si tu es tendue <strong>en permanence</strong> → besoin d\'<strong>espace</strong> et de <strong>légèreté</strong>']},
+  'envahie':{l:'😵 Envahie',
+    needs:['espace','libre','calme','respectee','stable','ancree'],
+    exemples:['Si tu te sens envahie <strong>par les émotions des autres</strong> → besoin de <strong>distance émotionnelle</strong>','Si tu te sens envahie <strong>par trop de sollicitations</strong> → besoin d\'<strong>espace</strong> et de <strong>silence</strong>','Si tu te sens envahie <strong>dans une relation</strong> → besoin de <strong>limites</strong> et de <strong>liberté</strong>','Si tu te sens envahie <strong>par tes propres pensées</strong> → besoin d\'<strong>ancrage</strong> et de <strong>calme</strong>']},
+  'épuisée':{l:'😩 Épuisée',
+    needs:['repos','soutenue','legerete','presence','calme','alaise'],
+    exemples:['Si tu es épuisée <strong>physiquement</strong> → besoin de <strong>repos sans culpabilité</strong>','Si tu es épuisée <strong>émotionnellement</strong> → besoin de <strong>légèreté</strong> et qu\'on prenne soin de toi','Si tu es épuisée <strong>de donner</strong> → besoin d\'être <strong>reçue</strong> à ton tour','Si tu es épuisée <strong>de faire semblant</strong> → besoin d\'<strong>authenticité</strong> et d\'<strong>espace</strong>']},
+  'rejetée':{l:'💔 Rejetée',
+    needs:['acceptee','connexion','choisie','rassuree','securite','entendue'],
+    exemples:['Si tu te sens rejetée <strong>par quelqu\'un que tu aimes</strong> → besoin d\'être <strong>choisie</strong> et <strong>désirée</strong>','Si tu te sens rejetée <strong>dans un groupe</strong> → besoin d\'être <strong>acceptée</strong> et à ta place','Si tu te sens rejetée <strong>parce qu\'on t\'a ignorée</strong> → besoin d\'être <strong>visible</strong> et <strong>reconnue</strong>','Si tu te sens rejetée <strong>après avoir été vulnérable</strong> → besoin de <strong>sécurité émotionnelle</strong>']},
 };
 
-const EMO_TYPES=[
-  {id:'fragile',l:'💔 Fragile'},{id:'blessée',l:'🤕 Blessée'},
-  {id:'angoissée',l:'😰 Angoissée'},{id:'triste',l:'😢 Triste'},
-  {id:'seule',l:'🫂 Seule'},{id:'en colère',l:'😤 En colère'},
-  {id:'incomprise',l:'😶 Incomprise'},{id:'débordée',l:'😵 Débordée'},
-  {id:'déçue',l:'😔 Déçue'},{id:'perdue',l:'😕 Perdue'},
-  {id:'honteuse',l:'😳 Honteuse'},{id:'tendue',l:'😬 Tendue'},
-];
+// Pour compatibilité, conserver EMO_TYPES et EMO_NEEDS_MAP dérivés de EMO_DATA
+const EMO_TYPES=Object.entries(EMO_DATA).map(([id,d])=>({id,l:d.l}));
+const EMO_NEEDS_MAP=Object.fromEntries(Object.entries(EMO_DATA).map(([id,d])=>[id,d.needs]));
 
 let S_emoLien=null;
 let S_emoType=null;
@@ -620,11 +663,19 @@ function renderEmoTypes(){
 function selectEmoType(id){
   S_emoType=id;S_emoNeeds.clear();
   renderEmoTypes();
-  // Afficher les besoins liés à cette émotion
+  const emo=EMO_DATA[id];
+  if(!emo)return;
   const phase3=document.getElementById('emo-phase3');
   phase3.style.display='block';phase3.style.animation='fadeUp 0.3s ease both';
-  document.getElementById('needs-title').textContent='Ce dont tu as besoin quand tu te sens '+id+' …';
-  renderNeeds(EMO_NEEDS_MAP[id]||[]);
+  document.getElementById('needs-title').textContent='Ce que tu cherches souvent à retrouver quand tu te sens '+id+' …';
+  renderNeeds(emo.needs);
+  // Afficher les exemples
+  const exEl=document.getElementById('need-examples');
+  if(emo.exemples&&emo.exemples.length){
+    exEl.style.display='block';
+    exEl.innerHTML='<div style="font-size:10px;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">Pour identifier ton besoin précis</div>'+
+      emo.exemples.map(ex=>'<div class="need-example">→ '+ex+'</div>').join('');
+  }else{exEl.style.display='none';}
 }
 
 function renderNeeds(filter){
