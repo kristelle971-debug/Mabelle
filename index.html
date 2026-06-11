@@ -389,7 +389,23 @@ canvas{display:block;}
           <div class="card-title" style="margin-bottom:4px;" id="needs-title">Ce dont tu as besoin</div>
           <div style="font-size:10px;color:var(--text-muted);margin-bottom:10px;">Clique sur la phrase qui te parle le plus</div>
           <div class="phrase-list" id="phrase-list"></div>
-          <button class="action-btn btn-secondary" style="font-size:12px;padding:11px;margin-top:10px;" onclick="saveEmoNeeds()">💾 Sauvegarder</button>
+
+          <!-- PHASE 4 : recadrage cognitif — apparaît quand une phrase est sélectionnée -->
+          <div id="emo-phase4" style="display:none;margin-top:16px;border-top:1px solid var(--border-light);padding-top:14px;">
+            <div class="card-title" style="margin-bottom:3px;">Pour relativiser…</div>
+            <div style="font-size:11px;color:var(--violet-bright);margin-bottom:4px;font-weight:600;" id="phase4-need"></div>
+            <div style="font-size:10px;color:var(--text-muted);margin-bottom:10px;">Cite 3 situations qui prouvent que tu y as déjà accès</div>
+            <input type="text" class="text-input" id="counter1" placeholder="Situation 1…" style="padding:10px 12px;font-size:13px;">
+            <input type="text" class="text-input" id="counter2" placeholder="Situation 2…" style="margin-top:7px;padding:10px 12px;font-size:13px;">
+            <input type="text" class="text-input" id="counter3" placeholder="Situation 3…" style="margin-top:7px;padding:10px 12px;font-size:13px;">
+            <button class="action-btn btn-primary" id="reframe-btn" style="font-size:12px;padding:11px;margin-top:10px;" onclick="analyzeReframe()">✦ Analyser</button>
+            <div class="ai-block violet" id="reframe-box" style="display:none;margin-top:10px;">
+              <div class="ai-tag violet">✦ RECADRAGE BIENVEILLANT</div>
+              <div class="ai-text" id="reframe-text"></div>
+            </div>
+          </div>
+
+          <button class="action-btn btn-secondary" style="font-size:12px;padding:11px;margin-top:12px;" onclick="saveEmoNeeds()">💾 Sauvegarder</button>
         </div>
       </div>
     </div>
@@ -759,7 +775,8 @@ const EMO_TYPES=Object.entries(EMO_DATA).map(([id,d])=>({id,l:d.l}));
 const EMO_NEEDS_MAP=Object.fromEntries(Object.entries(EMO_DATA).map(([id,d])=>[id,d.phrases.map(p=>p.n)]));
 let S_emoLien=null;
 let S_emoType=null;
-const S_selectedPhrases=new Set(); // phrases sélectionnées (texte)
+const S_selectedPhrases=new Set();
+let S_currentPhrase=null; // dernière phrase sélectionnée pour le recadrage
 
 function renderEmoTypes(){
   const g=document.getElementById('emo-type-grid');if(!g)return;
@@ -767,7 +784,7 @@ function renderEmoTypes(){
 }
 
 function selectEmoType(id){
-  S_emoType=id;S_selectedPhrases.clear();
+  S_emoType=id;S_selectedPhrases.clear();S_currentPhrase=null;
   renderEmoTypes();
   const emo=EMO_DATA[id];if(!emo)return;
   const phase3=document.getElementById('emo-phase3');
@@ -786,8 +803,54 @@ function renderPhrases(phrases){
 function togglePhrase(i){
   const emo=EMO_DATA[S_emoType];if(!emo)return;
   const p=emo.phrases[i];
-  if(S_selectedPhrases.has(p.t))S_selectedPhrases.delete(p.t);else S_selectedPhrases.add(p.t);
+  if(S_selectedPhrases.has(p.t)){
+    S_selectedPhrases.delete(p.t);
+    if(S_currentPhrase&&S_currentPhrase.t===p.t){S_currentPhrase=null;document.getElementById('emo-phase4').style.display='none';}
+  } else {
+    S_selectedPhrases.add(p.t);
+    S_currentPhrase=p;
+    // Révéler phase 4
+    const p4=document.getElementById('emo-phase4');
+    p4.style.display='block';p4.style.animation='fadeUp 0.3s ease both';
+    document.getElementById('phase4-need').textContent='Besoin identifié : '+p.n;
+    ['counter1','counter2','counter3'].forEach(id=>{document.getElementById(id).value='';});
+    document.getElementById('reframe-box').style.display='none';
+    document.getElementById('reframe-btn').innerHTML='✦ Analyser';
+    document.getElementById('reframe-btn').disabled=false;
+  }
   renderPhrases(emo.phrases);
+}
+
+async function analyzeReframe(){
+  const p=S_currentPhrase;if(!p){toast('Sélectionne une phrase d\'abord');return;}
+  const c1=document.getElementById('counter1').value.trim();
+  const c2=document.getElementById('counter2').value.trim();
+  const c3=document.getElementById('counter3').value.trim();
+  const examples=[c1,c2,c3].filter(Boolean);
+  if(!examples.length){toast('Cite au moins une situation');return;}
+  const btn=document.getElementById('reframe-btn');
+  btn.innerHTML='<div class="ai-loading"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div>';
+  btn.disabled=true;
+  const prompt=`Tu es une thérapeute bienveillante spécialisée en hypersensibilité.
+
+Une femme de 43 ans a exprimé ce ressenti :
+"${p.t}"
+Ce ressenti révèle un besoin de : ${p.n}
+
+Cependant, elle vient elle-même de nommer ces situations qui prouvent qu'elle a déjà accès à cette ressource :
+${examples.map((e,i)=>`${i+1}. ${e}`).join('\n')}
+
+En 2-3 phrases bienveillantes et affirmatoires, aide-la à voir que ${p.n} est déjà présent dans sa vie. Base-toi uniquement sur ce qu'elle vient de nommer. Ne pose AUCUNE question. Commence par valoriser ce qu'elle a su reconnaître. En français, tutoie-la.`;
+  try{
+    const data=await callClaude({model:'claude-haiku-4-5-20251001',max_tokens:280,messages:[{role:'user',content:prompt}]});
+    const txt=data.content?.[0]?.text||'';
+    document.getElementById('reframe-text').textContent=txt||'Analyse indisponible';
+    document.getElementById('reframe-box').style.display='block';
+  }catch(e){
+    document.getElementById('reframe-text').textContent='⚠️ '+(e.message||'Erreur connexion IA');
+    document.getElementById('reframe-box').style.display='block';
+  }
+  btn.innerHTML='✦ Relancer l\'analyse';btn.disabled=false;
 }
 
 function renderNeeds(){}
@@ -808,7 +871,7 @@ function onEnter(id){
   if(id==='reflexion-screen'){renderRefCit();renderMyCits();}
   if(id==='timeline-screen'){renderTLPeriodUI();renderGStats();renderTimeline();}
   if(id==='emotions-screen'){
-    S_emoLien=null;S_emoType=null;S_selectedPhrases.clear();
+    S_emoLien=null;S_emoType=null;S_selectedPhrases.clear();S_currentPhrase=null;
     const p2=document.getElementById('emo-phase2');if(p2)p2.style.display='none';
     const p3=document.getElementById('emo-phase3');if(p3)p3.style.display='none';
     document.querySelectorAll('.lien-btn').forEach(b=>b.classList.remove('active'));
@@ -974,7 +1037,7 @@ function resetEmoForm(){
   document.getElementById('emo-phase2').style.display='none';
   document.getElementById('emo-phase3').style.display='none';
   document.querySelectorAll('.lien-btn').forEach(b=>b.classList.remove('active'));
-  S_emoLien=null;S_emoType=null;S_selectedPhrases.clear();
+  S_emoLien=null;S_emoType=null;S_selectedPhrases.clear();S_currentPhrase=null;
   const btn=document.getElementById('emo-btn');
   btn.innerHTML="Analyser avec l'IA ✦";
   btn.onclick=analyzeEmo;
