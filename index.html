@@ -776,15 +776,20 @@ const EMO_NEEDS_MAP=Object.fromEntries(Object.entries(EMO_DATA).map(([id,d])=>[i
 let S_emoLien=null;
 let S_emoType=null;
 const S_selectedPhrases=new Set();
-let S_currentPhrase=null; // dernière phrase sélectionnée pour le recadrage
+let S_currentPhrase=null;
+let S_suggestedEmotions=[]; // émotions suggérées par l'IA
 
 function renderEmoTypes(){
   const g=document.getElementById('emo-type-grid');if(!g)return;
-  g.innerHTML=EMO_TYPES.map(e=>`<div class="need-chip${S_emoType===e.id?' active':''}" onclick="selectEmoType('${e.id}')">${e.l}</div>`).join('');
+  // Afficher uniquement les émotions suggérées par l'IA (ou toutes si pas encore d'IA)
+  const list=S_suggestedEmotions.length
+    ?S_suggestedEmotions.map(id=>EMO_DATA[id]).filter(Boolean).map((d,i)=>({id:S_suggestedEmotions[i],l:d.l}))
+    :EMO_TYPES;
+  g.innerHTML=list.map(e=>`<div class="need-chip${S_emoType===e.id?' active':''}" onclick="selectEmoType('${e.id}')">${e.l}</div>`).join('');
 }
 
 function selectEmoType(id){
-  S_emoType=id;S_selectedPhrases.clear();S_currentPhrase=null;
+  S_emoType=id;S_selectedPhrases.clear();S_currentPhrase=null;S_suggestedEmotions=[];
   renderEmoTypes();
   const emo=EMO_DATA[id];if(!emo)return;
   const phase3=document.getElementById('emo-phase3');
@@ -846,6 +851,17 @@ En 2-3 phrases bienveillantes et affirmatoires, aide-la à voir que ${p.n} est d
     const txt=data.content?.[0]?.text||'';
     document.getElementById('reframe-text').textContent=txt||'Analyse indisponible';
     document.getElementById('reframe-box').style.display='block';
+    // Sauvegarder dans l'historique localStorage
+    if(txt){
+      const d=ls();
+      if(d.emotions&&d.emotions.length>0){
+        d.emotions[0].reframePhrase=p.t;
+        d.emotions[0].reframeNeed=p.n;
+        d.emotions[0].reframe=txt;
+        lsSave(d);
+      }
+      renderEmoHistory();
+    }
   }catch(e){
     document.getElementById('reframe-text').textContent='⚠️ '+(e.message||'Erreur connexion IA');
     document.getElementById('reframe-box').style.display='block';
@@ -871,7 +887,7 @@ function onEnter(id){
   if(id==='reflexion-screen'){renderRefCit();renderMyCits();}
   if(id==='timeline-screen'){renderTLPeriodUI();renderGStats();renderTimeline();}
   if(id==='emotions-screen'){
-    S_emoLien=null;S_emoType=null;S_selectedPhrases.clear();S_currentPhrase=null;
+    S_emoLien=null;S_emoType=null;S_selectedPhrases.clear();S_currentPhrase=null;S_suggestedEmotions=[];
     const p2=document.getElementById('emo-phase2');if(p2)p2.style.display='none';
     const p3=document.getElementById('emo-phase3');if(p3)p3.style.display='none';
     document.querySelectorAll('.lien-btn').forEach(b=>b.classList.remove('active'));
@@ -987,27 +1003,39 @@ async function analyzeEmo(){
   addTL('emotion',feeling+' (intensité : '+intensity+')');
   renderEmoHistory();
   // IA
-  const prompt=`Tu es une thérapeute bienveillante spécialisée en hypersensibilité. Une femme de 43 ans partage :
+  const emoList=Object.keys(EMO_DATA).join(', ');
+  const prompt=`Tu es une thérapeute bienveillante spécialisée en hypersensibilité. Une femme de 43 ans exprime :
 
-Émotion ressentie : "${feeling}"
-${context?'Contexte : "'+context+'"':'Pas de contexte précisé.'}
+Ressenti : "${feeling}"
+${context?'Contexte : "'+context+'"':''}
 Intensité : ${intensity}/100
 
-RÈGLES ABSOLUES :
-- Ne pose AUCUNE question. Uniquement des affirmations et des éclairages.
-- Tu offres un miroir bienveillant, pas un échange.
-- 3 à 4 phrases maximum.
-- Aide à comprendre l'émotion, pas à la résoudre.
-- En français, tutoie-la, sois douce et précise.`;
+Fais deux choses :
+1. Donne un éclairage bienveillant en 3-4 phrases affirmatives. AUCUNE question. Tutoie-la, sois douce.
+2. Identifie 3 à 4 émotions parmi cette liste qui correspondent le mieux à ce qu'elle exprime : ${emoList}
+
+Réponds UNIQUEMENT en JSON valide, sans texte autour, sans balises markdown :
+{"analysis":"ton éclairage ici","emotions":["emotion1","emotion2","emotion3"]}`;
   try{
-    const data=await callClaude({model:'claude-haiku-4-5-20251001',max_tokens:350,messages:[{role:'user',content:prompt}]});
-    const txt=data.content?.[0]?.text||'';
-    if(txt){
-      document.getElementById('emo-ai-text').textContent=txt;
-      document.getElementById('emo-ai-box').style.display='block';
-      if(inserted)SB.from('emotions').update({reponse_ia:txt}).eq('id',inserted.id).then(()=>{});
-      if(d.emotions[0])d.emotions[0].ai=txt;lsSave(d);
+    const data=await callClaude({model:'claude-haiku-4-5-20251001',max_tokens:500,messages:[{role:'user',content:prompt}]});
+    const raw=data.content?.[0]?.text||'';
+    let analysis=raw, emotions=[];
+    try{
+      // Nettoyer le JSON (enlever éventuels backticks)
+      const clean=raw.replace(/```json|```/g,'').trim();
+      const parsed=JSON.parse(clean);
+      analysis=parsed.analysis||raw;
+      emotions=(parsed.emotions||[]).filter(e=>EMO_DATA[e]);
+    }catch(e){
+      // Si pas du JSON valide, afficher le texte brut
+      analysis=raw;
     }
+    document.getElementById('emo-ai-text').textContent=analysis;
+    document.getElementById('emo-ai-box').style.display='block';
+    // Stocker les émotions suggérées
+    S_suggestedEmotions=emotions.length?emotions:Object.keys(EMO_DATA).slice(0,6);
+    if(inserted)SB.from('emotions').update({reponse_ia:analysis}).eq('id',inserted.id).then(()=>{});
+    if(d.emotions[0]){d.emotions[0].ai=analysis;lsSave(d);}
   }catch(e){
     const msg=e&&e.message?e.message:String(e);
     console.error('IA:',msg);
@@ -1037,7 +1065,7 @@ function resetEmoForm(){
   document.getElementById('emo-phase2').style.display='none';
   document.getElementById('emo-phase3').style.display='none';
   document.querySelectorAll('.lien-btn').forEach(b=>b.classList.remove('active'));
-  S_emoLien=null;S_emoType=null;S_selectedPhrases.clear();S_currentPhrase=null;
+  S_emoLien=null;S_emoType=null;S_selectedPhrases.clear();S_currentPhrase=null;S_suggestedEmotions=[];
   const btn=document.getElementById('emo-btn');
   btn.innerHTML="Analyser avec l'IA ✦";
   btn.onclick=analyzeEmo;
@@ -1072,10 +1100,14 @@ async function renderEmoHistory(){
     const needsArr=e.needs||[];
     const needsHtml=needsArr.length?'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">'+needsArr.map(nid=>{const n=NEEDS.find(x=>x.id===nid);return n?'<span style="font-size:10px;background:rgba(244,197,90,0.1);border:1px solid rgba(244,197,90,0.25);border-radius:10px;padding:2px 8px;color:var(--gold);">'+n.l+'</span>':''}).join('')+'</div>':'';
     const metaHtml=(emoTypeLbl||lienLbl)?'<div style="font-size:10px;color:var(--violet-bright);margin-top:4px;">'+(emoTypeLbl?emoTypeLbl+' ':'')+( lienLbl?'· '+lienLbl:'')+'</div>':'';
+    // Phrase sélectionnée
+    const phraseHtml=e.reframePhrase?'<div style="margin-top:7px;padding:8px 10px;background:rgba(192,132,252,0.07);border-left:2px solid var(--violet-bright);border-radius:0 var(--radius-xs) var(--radius-xs) 0;font-size:12px;color:var(--text-secondary);">→ '+e.reframePhrase+'<span style="margin-left:6px;font-size:10px;color:var(--gold);background:rgba(244,197,90,0.1);border-radius:10px;padding:2px 7px;">'+e.reframeNeed+'</span></div>':'';
+    // Recadrage bienveillant
+    const reframeHtml=e.reframe?'<div style="margin-top:7px;padding:8px 10px;background:rgba(72,69,150,0.12);border-radius:var(--radius-xs);font-size:11px;color:var(--text-muted);line-height:1.5;font-style:italic;"><span style="font-size:9px;color:var(--violet-bright);font-weight:700;font-style:normal;display:block;margin-bottom:3px;letter-spacing:1px;">✦ RECADRAGE</span>'+e.reframe+'</div>':'';
     return '<div class="hist-item" id="emo-h-'+id+'">'+
       '<div class="hist-date">'+dateStr+'</div>'+
       '<div class="hist-text">'+(e.ressenti||e.feeling||'')+'</div>'+
-      metaHtml+needsHtml+
+      metaHtml+needsHtml+phraseHtml+reframeHtml+
       '<div class="hist-del-btn" onclick="delEmo(\''+id+'\','+i+')">✕</div>'+
     '</div>';
   }).join('');
